@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <!-- Capacitor runtime (injected by build) -->
+    <script src="../capacitor.js"></script>
+    <!-- Physio SUAI Capacitor modules -->
+    <script src="../js/capacitor-bridge.js"></script>
+    <script src="../js/dexie-offline.js"></script>
+    <script src="../js/alarm-manager.js"></script>
+    <script src="../js/background-audio.js"></script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Assignments - Physio SUAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="../js/hybrid-config.js"></script>
+  <script src="../js/chat-theme.js"></script>
+  <script src="../js/file-preview.js"></script>
+  <script src="../js/confirm-modal.js"></script>
+  <script src="../js/main.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    html,body{overflow-x:hidden;max-width:100vw}
+    body{background:#0d1117;color:#fff;font-family:system-ui,sans-serif;min-height:100vh}
+    #topNav{background:#111827;border-bottom:1px solid #1f2937;position:sticky;top:0;z-index:50;padding:10px 12px 0}
+    #navRow1{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+    #backBtn{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#9333ea,#ec4899);color:#fff;border:none;border-radius:12px;padding:8px 12px;cursor:pointer;font-weight:700;font-size:13px;flex-shrink:0}
+    #pageTitle{font-size:16px;font-weight:800;background:linear-gradient(135deg,#ec4899,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #topAddBtn{background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer;flex-shrink:0}
+    #modeToggle{display:flex;background:#1a1f2e;border-radius:20px;padding:3px;gap:2px;margin:8px 0 0}
+    .modeBtn{flex:1;padding:6px 10px;border-radius:16px;border:none;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;color:#9ca3af;background:none;white-space:nowrap}
+    .modeBtn.active{background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff}
+    #examTabBar{overflow:hidden;max-height:0;transition:max-height .3s ease}
+    #examTabBar.open{max-height:120px}
+    #examTabsScroll{display:flex;gap:8px;overflow-x:auto;padding:10px 0 8px;scrollbar-width:none}
+    #examTabsScroll::-webkit-scrollbar{display:none}
+    .examTab{padding:7px 14px;border-radius:20px;border:none;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:#9ca3af;background:#1a1f2e;transition:all .2s;flex-shrink:0}
+    .examTab.active{background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff}
+    #examSqBar{display:none;padding:10px 8px 10px;gap:10px}
+    #examSqBar.visible{display:grid;grid-template-columns:1fr 1fr}
+    .eqSq{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:6px 0}
+    .eqSqIcon{width:64px;height:64px;border-radius:18px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;font-size:26px;transition:all .2s}
+    .eqSq.active .eqSqIcon{background:linear-gradient(135deg,#ec4899,#8b5cf6);box-shadow:0 3px 14px rgba(236,72,153,.5)}
+    .eqSqLabel{font-size:11px;color:#9ca3af;font-weight:700;text-align:center}
+    .eqSq.active .eqSqLabel{color:#ec4899}
+    .asgCard{background:#1f2937;border-radius:14px;overflow:hidden;border:1px solid #374151;cursor:pointer}
+    .asgCard:active{border-color:#ec4899}
+    .fcSetCard{border-radius:20px;padding:18px 16px;cursor:pointer;position:relative;min-height:120px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+    .fcSetCard:active{opacity:.85}
+    .fcFlipCard{background:#1a1f2e;border-radius:14px;border:1px solid #2a3942;padding:16px;cursor:pointer;margin-bottom:10px}
+    .fcFlipCard:active{border-color:#8b5cf6}
+    .fcFront{color:#f9fafb;font-size:15px;font-weight:600;margin:0}
+    .fcBack{color:#a78bfa;font-size:14px;margin:10px 0 0;display:none;border-top:1px solid #374151;padding-top:10px;white-space:pre-wrap;line-height:1.6}
+    .fcFlipCard.flipped .fcBack{display:block}
+    .fcFlipCard.flipped .fcHint{display:none}
+    .tipCard{background:#1a1f2e;border-radius:12px;border-left:3px solid #ec4899;padding:14px 16px}
+    .sgCard{background:#1a1f2e;border-radius:14px;border:1px solid #2a3942;padding:16px}
+    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;align-items:flex-end;justify-content:center}
+    .modal.open{display:flex}
+    .modalBox{background:#1a1f2e;border-radius:20px 20px 0 0;width:100%;max-width:600px;padding:22px 16px 36px;border:1px solid #2a3942;max-height:92vh;overflow-y:auto}
+    .inp{width:100%;background:#111827;border:1.5px solid #374151;border-radius:12px;color:#fff;padding:11px 14px;font-size:15px;outline:none;font-family:inherit}
+    .inp:focus{border-color:#ec4899}
+    textarea.inp{resize:vertical}
+    .lbl{color:#9ca3af;font-size:11px;font-weight:700;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+    .btnRow{display:flex;gap:10px;margin-top:18px}
+    .cancelBtn{flex:1;background:#374151;color:#fff;border:none;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;font-size:15px}
+    .submitBtn{flex:1;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;border:none;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;font-size:15px}
+    .emptyMsg{color:#6b7280;text-align:center;padding:48px 0;font-size:14px}
+    .delBtn{background:#ef4444;color:#fff;border:none;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0}
+    .colorSwatch{width:32px;height:32px;border-radius:10px;border:3px solid transparent;cursor:pointer;transition:transform .15s}
+    .colorSwatch.sel{border-color:#fff;transform:scale(1.2)}
+    .cardRow{background:#111827;border-radius:12px;padding:12px;margin-bottom:10px;position:relative}
+    .cardRowNum{color:#8b5cf6;font-size:11px;font-weight:700;margin-bottom:8px}
+    .removeCardBtn{position:absolute;top:10px;right:10px;background:#ef4444;color:#fff;border:none;border-radius:8px;padding:3px 7px;font-size:11px;cursor:pointer}
+  </style>
+</head>
+<body>
+<nav id="topNav">
+  <div id="navRow1">
+    <button id="backBtn" onclick="window.location.href='../home.html'">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+      Back
+    </button>
+    <span id="pageTitle">Assignments</span>
+    <button id="topAddBtn" onclick="openAddModal()">+ Add</button>
+  </div>
+  <div id="modeToggle">
+    <button class="modeBtn active" id="btnModeAssign" onclick="switchMode('assign')">📋 Assignment</button>
+    <button class="modeBtn" id="btnModeExam" onclick="switchMode('exam')">📝 Exam</button>
+  </div>
+  <div id="examSqBar">
+    <div class="eqSq active" id="esqPQ" onclick="switchExamTab('pq')"><div class="eqSqIcon">📄</div><span class="eqSqLabel">Past Q</span></div>
+    <div class="eqSq" id="esqBooks" onclick="switchExamTab('books')"><div class="eqSqIcon">📚</div><span class="eqSqLabel">Books</span></div>
+    <div class="eqSq" id="esqGuides" onclick="switchExamTab('guides')"><div class="eqSqIcon">🗒️</div><span class="eqSqLabel">Guides</span></div>
+    <div class="eqSq" id="esqFlash" onclick="switchExamTab('flash')"><div class="eqSqIcon">⚡</div><span class="eqSqLabel">Flash</span></div>
+    <div class="eqSq" id="esqTips" onclick="switchExamTab('tips')"><div class="eqSqIcon">💡</div><span class="eqSqLabel">Tips</span></div>
+  </div>
+  <div id="examTabBar">
+    <div id="examTabsScroll">
+      <button class="examTab active" id="etPQ" onclick="switchExamTab('pq')">📄 Past Q</button>
+      <button class="examTab" id="etBooks" onclick="switchExamTab('books')">📚 Textbooks</button>
+      <button class="examTab" id="etGuides" onclick="switchExamTab('guides')">🗒️ Guides</button>
+      <button class="examTab" id="etFlash" onclick="switchExamTab('flash')">⚡ Flashcards</button>
+      <button class="examTab" id="etTips" onclick="switchExamTab('tips')">💡 Tips</button>
+    </div>
+  </div>
+</nav>
+
+<div style="max-width:700px;margin:0 auto;padding:14px 12px">
+  <!-- Sentinel: when this goes offscreen = user scrolled down -->
+  <div id="scrollSentinel" style="height:1px;margin-bottom:-1px"></div>
+  <div id="assignSection">
+    <div id="assignmentsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:14px"></div>
+  </div>
+  <div id="examSection" style="display:none">
+    <div id="tabPQ"><div id="pqGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:14px"></div></div>
+    <div id="tabBooks" style="display:none"><div id="booksGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:14px"></div></div>
+    <div id="tabGuides" style="display:none"><div id="guidesGrid" style="display:flex;flex-direction:column;gap:12px"></div></div>
+    <div id="tabFlash" style="display:none">
+      <p style="color:#9ca3af;font-size:12px;margin:0 0 12px">⚡ Tap a set to open · tap card to flip</p>
+      <div id="flashGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:14px"></div>
+    </div>
+    <div id="tabTips" style="display:none"><div id="tipsGrid" style="display:flex;flex-direction:column;gap:10px"></div></div>
+  </div>
+</div>
+
+<!-- Assignment Add Modal -->
+<div id="addModal" class="modal">
+  <div class="modalBox">
+    <h2 style="font-size:19px;font-weight:800;margin:0 0 18px">Add Assignment</h2>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div><label class="lbl">Name</label><input type="text" id="assignmentName" placeholder="Assignment name…" class="inp"></div>
+      <div><label class="lbl">Description</label><textarea id="assignmentDesc" placeholder="What's it about?" rows="3" class="inp"></textarea></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="openAssignCamera()" style="flex:1;background:#1e3a5f;color:#93c5fd;border:none;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;font-size:13px">📷 Camera</button>
+        <button onclick="selectFile('image')" style="flex:1;background:#1e1b4b;color:#a5b4fc;border:none;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;font-size:13px">🖼️ Gallery</button>
+        <button onclick="selectFile('pdf')" style="flex:1;background:#1c1917;color:#fca5a5;border:none;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;font-size:13px">📄 PDF</button>
+      </div>
+      <div id="filePreview" style="display:none;background:#111827;border-radius:10px;padding:12px"></div>
+      <div class="btnRow">
+        <button class="cancelBtn" onclick="closeAddModal()">Cancel</button>
+        <button class="submitBtn" onclick="submitForm()">Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Exam File Upload Modal -->
+<div id="examFileModal" class="modal">
+  <div class="modalBox">
+    <h2 id="examFileModalTitle" style="font-size:19px;font-weight:800;margin:0 0 18px">Add Past Question</h2>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div><label class="lbl">Title</label><input type="text" id="examFileName" placeholder="e.g. 2023 Anatomy Past Q…" class="inp"></div>
+      <div><label class="lbl">Year / Course (optional)</label><input type="text" id="examFileCourse" placeholder="e.g. Physiology 300L 2022" class="inp"></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="selectExamFile('image')" style="flex:1;background:#1e1b4b;color:#a5b4fc;border:none;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;font-size:13px">🖼️ Gallery</button>
+        <button onclick="selectExamFile('pdf')" style="flex:1;background:#1c1917;color:#fca5a5;border:none;border-radius:12px;padding:11px;font-weight:700;cursor:pointer;font-size:13px">📄 PDF</button>
+      </div>
+      <div id="examFilePreview" style="display:none;background:#111827;border-radius:10px;padding:12px"></div>
+      <div class="btnRow">
+        <button class="cancelBtn" onclick="closeExamFileModal()">Cancel</button>
+        <button class="submitBtn" onclick="submitExamFile()">Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Study Guide Modal -->
+<div id="guideModal" class="modal">
+  <div class="modalBox">
+    <h2 style="font-size:19px;font-weight:800;margin:0 0 18px">🗒️ Add Study Guide</h2>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div><label class="lbl">Topic / Title</label><input type="text" id="guideName" placeholder="e.g. Muscle Groups Overview" class="inp"></div>
+      <div><label class="lbl">Content</label><textarea id="guideContent" placeholder="Write the guide content…" rows="6" class="inp"></textarea></div>
+      <div class="btnRow">
+        <button class="cancelBtn" onclick="closeGuideModal()">Cancel</button>
+        <button class="submitBtn" onclick="submitGuide()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Flashcard Set Create Modal -->
+<div id="flashModal" class="modal">
+  <div class="modalBox">
+    <h2 style="font-size:19px;font-weight:800;margin:0 0 4px">⚡ Create Flashcard Set</h2>
+    <p style="color:#9ca3af;font-size:12px;margin:0 0 16px">Add multiple cards · pick a card colour</p>
+    <div style="margin-bottom:14px">
+      <label class="lbl">Set Topic / Title</label>
+      <input type="text" id="fcTopic" placeholder="e.g. Shoulder Muscles" class="inp">
+    </div>
+    <div style="margin-bottom:16px">
+      <label class="lbl">Card Colour (Remix)</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px" id="colorPicker">
+        <div class="colorSwatch sel" data-c="linear-gradient(135deg,#ec4899,#8b5cf6)" style="background:linear-gradient(135deg,#ec4899,#8b5cf6)" onclick="_pc(this)"></div>
+        <div class="colorSwatch" data-c="linear-gradient(135deg,#7c3aed,#4f46e5)" style="background:linear-gradient(135deg,#7c3aed,#4f46e5)" onclick="_pc(this)"></div>
+        <div class="colorSwatch" data-c="linear-gradient(135deg,#db2777,#9333ea)" style="background:linear-gradient(135deg,#db2777,#9333ea)" onclick="_pc(this)"></div>
+        <div class="colorSwatch" data-c="linear-gradient(135deg,#0ea5e9,#6366f1)" style="background:linear-gradient(135deg,#0ea5e9,#6366f1)" onclick="_pc(this)"></div>
+        <div class="colorSwatch" data-c="linear-gradient(135deg,#f59e0b,#ec4899)" style="background:linear-gradient(135deg,#f59e0b,#ec4899)" onclick="_pc(this)"></div>
+        <div class="colorSwatch" data-c="linear-gradient(135deg,#06b6d4,#8b5cf6)" style="background:linear-gradient(135deg,#06b6d4,#8b5cf6)" onclick="_pc(this)"></div>
+      </div>
+    </div>
+    <label class="lbl">Cards</label>
+    <div id="fcCardsList"></div>
+    <button onclick="addCardRow()" style="width:100%;background:#1f2937;color:#a78bfa;border:1.5px dashed #4b5563;border-radius:12px;padding:10px;font-weight:700;cursor:pointer;font-size:13px;margin-bottom:16px">+ Add Another Card</button>
+    <div class="btnRow">
+      <button class="cancelBtn" onclick="closeFlashModal()">Cancel</button>
+      <button class="submitBtn" onclick="submitFlash()">Save Set</button>
+    </div>
+  </div>
+</div>
+
+<!-- Flashcard Set View Modal -->
+<div id="flashViewModal" class="modal">
+  <div class="modalBox">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 id="fvTitle" style="font-size:18px;font-weight:800;margin:0"></h2>
+        <p id="fvMeta" style="color:#9ca3af;font-size:12px;margin:4px 0 0"></p>
+      </div>
+      <button onclick="closeFlashViewModal()" style="background:#374151;color:#fff;border:none;border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:700;font-size:16px">✕</button>
+    </div>
+    <div id="fvCards"></div>
+  </div>
+</div>
+
+<!-- Tip Modal -->
+<div id="tipModal" class="modal">
+  <div class="modalBox">
+    <h2 style="font-size:19px;font-weight:800;margin:0 0 18px">💡 Add Study Tip</h2>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div><label class="lbl">Tip</label><textarea id="tipContent" placeholder="Share a study tip with your class…" rows="4" class="inp"></textarea></div>
+      <div class="btnRow">
+        <button class="cancelBtn" onclick="closeTipModal()">Cancel</button>
+        <button class="submitBtn" onclick="submitTip()">Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loadingOverlay" class="hidden fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center">
+  <div class="text-center space-y-4">
+    <div class="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+    <p class="loading-text text-white font-semibold">Loading...</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+var _curMode='assign', _examTab='pq', _examFileType='pq';
+var selectedFile=null, examSelectedFile=null;
+var _examLoaded={};
+var _fcColor='linear-gradient(135deg,#ec4899,#8b5cf6)';
+var _cardCount=0;
+// Swipe detection via touchmove — works on all Android WebViews
+var _swipeTouchY = 0;
+var _swipeLocked = false;
+document.addEventListener('touchstart', function(e){
+  _swipeTouchY = e.touches[0].clientY;
+  _swipeLocked = false;
+}, {passive:true});
+document.addEventListener('touchmove', function(e){
+  if(_curMode !== 'exam' || _swipeLocked) return;
+  var dy = e.touches[0].clientY - _swipeTouchY;
+  if(dy < -35){
+    // swiped up (scrolling down) → sqcircles
+    _swipeLocked = true;
+    document.getElementById('examTabBar').classList.remove('open');
+    document.getElementById('examSqBar').classList.add('visible');
+  } else if(dy > 35){
+    // swiped down (scrolling up) → chips
+    _swipeLocked = true;
+    document.getElementById('examSqBar').classList.remove('visible');
+    document.getElementById('examTabBar').classList.add('open');
+  }
+}, {passive:true});
+
+function switchMode(m){
+  _curMode=m;
+  document.getElementById('btnModeAssign').classList.toggle('active',m==='assign');
+  document.getElementById('btnModeExam').classList.toggle('active',m==='exam');
+  document.getElementById('assignSection').style.display=m==='assign'?'':'none';
+  document.getElementById('examSection').style.display=m==='exam'?'':'none';
+  document.getElementById('pageTitle').textContent=m==='assign'?'Assignments':'Exam Mode';
+  document.getElementById('topAddBtn').textContent='+ Add';
+  if(m==='exam'){
+    document.getElementById('examTabBar').classList.add('open');
+    document.getElementById('examSqBar').classList.remove('visible');
+    switchExamTab(_examTab);
+  } else {
+    document.getElementById('examTabBar').classList.remove('open');
+    document.getElementById('examSqBar').classList.remove('visible');
+  }
+}
+
+function switchExamTab(tab){
+  _examTab=tab;
+  var ids=['pq','books','guides','flash','tips'];
+  var tabs=['PQ','Books','Guides','Flash','Tips'];
+  var esqs=['esqPQ','esqBooks','esqGuides','esqFlash','esqTips'];
+  ids.forEach(function(id,i){
+    var chip=document.getElementById('et'+tabs[i]);
+    if(chip) chip.classList.toggle('active',id===tab);
+    var sq=document.getElementById(esqs[i]);
+    if(sq) sq.classList.toggle('active',id===tab);
+    var pane=document.getElementById('tab'+tabs[i]);
+    if(pane) pane.style.display=id===tab?'':'none';
+  });
+  var labels={pq:'+ Past Q',books:'+ Textbook',guides:'+ Guide',flash:'+ Flashcard Set',tips:'+ Tip'};
+  document.getElementById('topAddBtn').textContent=labels[tab]||'+ Add';
+  if(!_examLoaded[tab]){_examLoaded[tab]=true; loadExamTab(tab);}
+}
+
+function openAddModal(){
+  if(_curMode==='assign'){_openAssignModal();return;}
+  if(_examTab==='pq') openExamFileModal('pq');
+  else if(_examTab==='books') openExamFileModal('books');
+  else if(_examTab==='guides') openGuideModal();
+  else if(_examTab==='flash') openFlashModal();
+  else if(_examTab==='tips') openTipModal();
+}
+
+function _openAssignModal(){document.getElementById('addModal').classList.add('open');}
+function closeAddModal(){document.getElementById('addModal').classList.remove('open');selectedFile=null;document.getElementById('filePreview').style.display='none';}
+
+function openAssignCamera(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    var i=document.createElement('input');i.type='file';i.accept='image/*';i.capture='environment';
+    i.onchange=function(){if(i.files[0]){selectedFile={file:i.files[0],name:i.files[0].name};_showPrev('filePreview',i.files[0].name);}};i.click();return;
+  }
+  var ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9999;background:#000;display:flex;flex-direction:column';
+  ov.innerHTML='<video id="_cv" autoplay playsinline style="flex:1;width:100%;object-fit:cover"></video><canvas id="_cc" style="display:none"></canvas>'+
+    '<div style="background:#111;padding:20px 0 36px;display:flex;align-items:center;justify-content:space-around">'+
+      '<button id="_cx" style="width:48px;height:48px;background:rgba(255,255,255,.15);border-radius:50%;border:none;color:#fff;font-size:22px;cursor:pointer">✕</button>'+
+      '<button id="_cs" style="width:72px;height:72px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer"></button>'+
+      '<button id="_cf" style="width:48px;height:48px;background:rgba(255,255,255,.15);border-radius:50%;border:none;cursor:pointer;color:#fff;font-size:20px">🔄</button>'+
+    '</div>';
+  document.body.appendChild(ov);
+  var fm='environment';
+  function startC(f){fm=f;navigator.mediaDevices.getUserMedia({video:{facingMode:f},audio:false}).then(function(s){var v=document.getElementById('_cv');if(!v)return;if(v.srcObject)v.srcObject.getTracks().forEach(function(t){t.stop();});v.srcObject=s;});}
+  startC(fm);
+  ov.querySelector('#_cx').onclick=function(){var v=document.getElementById('_cv');if(v&&v.srcObject)v.srcObject.getTracks().forEach(function(t){t.stop();});ov.remove();};
+  ov.querySelector('#_cf').onclick=function(){startC(fm==='environment'?'user':'environment');};
+  ov.querySelector('#_cs').onclick=function(){
+    var v=document.getElementById('_cv');var c=document.getElementById('_cc');
+    c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);
+    c.toBlob(function(b){var f=new File([b],'photo_'+Date.now()+'.jpg',{type:'image/jpeg'});selectedFile={file:f,name:f.name};_showPrev('filePreview',f.name);v.srcObject&&v.srcObject.getTracks().forEach(function(t){t.stop();});ov.remove();},'image/jpeg',0.92);
+  };
+}
+
+async function selectFile(type){var f=await handleFileSelect(type==='pdf'?'.pdf':'image/*');if(f){selectedFile=f;_showPrev('filePreview',f.name);}}
+async function submitForm(){
+  var n=document.getElementById('assignmentName').value.trim();
+  var d=document.getElementById('assignmentDesc').value.trim();
+  if(!n||!d){showToast('Fill all fields','error');return;}
+  var ok=await submitAssignment(n,d,selectedFile?selectedFile.file:null);
+  if(ok){closeAddModal();loadAssignments(document.getElementById('assignmentsGrid'));}
+}
+
+function openExamFileModal(type){
+  _examFileType=type; examSelectedFile=null;
+  document.getElementById('examFileName').value='';
+  document.getElementById('examFileCourse').value='';
+  document.getElementById('examFilePreview').style.display='none';
+  document.getElementById('examFileModalTitle').textContent=type==='pq'?'📄 Add Past Question':'📚 Add Textbook';
+  document.getElementById('examFileModal').classList.add('open');
+}
+function closeExamFileModal(){document.getElementById('examFileModal').classList.remove('open');}
+async function selectExamFile(type){var f=await handleFileSelect(type==='pdf'?'.pdf':'image/*');if(f){examSelectedFile=f;_showPrev('examFilePreview',f.name);}}
+async function submitExamFile(){
+  var n=document.getElementById('examFileName').value.trim();
+  var c=document.getElementById('examFileCourse').value.trim();
+  if(!n){showToast('Add a title','error');return;}
+  showLoading('Uploading…');
+  var fileUrl=null,fileType=null;
+  if(examSelectedFile){
+    var up=await uploadFile(examSelectedFile.file,_examFileType==='pq'?'examPQ':'examBooks');
+    if(up.success){fileUrl=up.url;fileType=examSelectedFile.file.type;}
+  }
+  var path=_examFileType==='pq'?'examPQ':'examBooks';
+  var res=await saveToFirebase(path,{name:n,course:c,fileUrl:fileUrl,fileType:fileType,author:currentUser?currentUser.email:'Anonymous',authorId:currentUser?currentUser.uid:'anon',timestamp:Date.now()});
+  hideLoading();
+  if(res.success){showToast('Uploaded!');closeExamFileModal();_examLoaded[_examFileType]=false;loadExamTab(_examTab);}
+  else showToast('Upload failed','error');
+}
+
+function openGuideModal(){document.getElementById('guideName').value='';document.getElementById('guideContent').value='';document.getElementById('guideModal').classList.add('open');}
+function closeGuideModal(){document.getElementById('guideModal').classList.remove('open');}
+async function submitGuide(){
+  var n=document.getElementById('guideName').value.trim();
+  var c=document.getElementById('guideContent').value.trim();
+  if(!n||!c){showToast('Fill both fields','error');return;}
+  showLoading('Saving…');
+  var r=await saveToFirebase('examGuides',{name:n,content:c,author:currentUser?currentUser.email:'Anonymous',authorId:currentUser?currentUser.uid:'anon',timestamp:Date.now()});
+  hideLoading();
+  if(r.success){showToast('Guide saved!');closeGuideModal();_examLoaded['guides']=false;loadExamTab('guides');}
+  else showToast('Save failed','error');
+}
+
+// flashcard color picker
+function _pc(el){
+  document.querySelectorAll('#colorPicker .colorSwatch').forEach(function(s){s.classList.remove('sel');});
+  el.classList.add('sel');
+  _fcColor=el.getAttribute('data-c');
+}
+
+function addCardRow(){
+  _cardCount++;
+  var n=_cardCount;
+  var list=document.getElementById('fcCardsList');
+  var div=document.createElement('div');
+  div.className='cardRow';
+  div.id='cardRow_'+n;
+  div.innerHTML='<div class="cardRowNum">Card '+n+'</div>'+
+    (n>1?'<button class="removeCardBtn" onclick="var e=document.getElementById(\'cardRow_'+n+'\');if(e)e.remove()">✕</button>':'')+
+    '<input type="text" placeholder="Question (Front)" class="inp" id="fcQ_'+n+'" style="margin-bottom:8px">'+
+    '<textarea placeholder="Answer (Back)" rows="2" class="inp" id="fcA_'+n+'"></textarea>';
+  list.appendChild(div);
+}
+
+function openFlashModal(){
+  _cardCount=0;
+  document.getElementById('fcTopic').value='';
+  document.getElementById('fcCardsList').innerHTML='';
+  _fcColor='linear-gradient(135deg,#ec4899,#8b5cf6)';
+  document.querySelectorAll('#colorPicker .colorSwatch').forEach(function(s,i){s.classList.toggle('sel',i===0);});
+  addCardRow();
+  document.getElementById('flashModal').classList.add('open');
+}
+function closeFlashModal(){document.getElementById('flashModal').classList.remove('open');}
+async function submitFlash(){
+  var topic=document.getElementById('fcTopic').value.trim();
+  if(!topic){showToast('Add a topic name','error');return;}
+  var cards=[];
+  document.querySelectorAll('.cardRow').forEach(function(row){
+    var id=row.id.replace('cardRow_','');
+    var qEl=document.getElementById('fcQ_'+id);
+    var aEl=document.getElementById('fcA_'+id);
+    var q=qEl?qEl.value.trim():'';
+    var a=aEl?aEl.value.trim():'';
+    if(q&&a) cards.push({q:q,a:a});
+  });
+  if(!cards.length){showToast('Add at least one card','error');return;}
+  showLoading('Saving…');
+  var r=await saveToFirebase('examFlashcards',{topic:topic,color:_fcColor,cards:cards,cardCount:cards.length,author:currentUser?currentUser.email:'Anonymous',authorId:currentUser?currentUser.uid:'anon',timestamp:Date.now()});
+  hideLoading();
+  if(r.success){showToast('Set saved!');closeFlashModal();_examLoaded['flash']=false;loadExamTab('flash');}
+  else showToast('Save failed','error');
+}
+
+var _fcSetCache={};
+function openFlashSet(setData){
+  document.getElementById('fvTitle').textContent=setData.topic||'Flashcard Set';
+  document.getElementById('fvMeta').textContent=(setData.cardCount||(setData.cards?setData.cards.length:0))+' cards · by '+(setData.author||'');
+  var html='';
+  (setData.cards||[]).forEach(function(c){
+    html+='<div class="fcFlipCard" onclick="this.classList.toggle(\'flipped\')">'+
+      '<p class="fcFront">'+_esc(c.q)+'</p>'+
+      '<div class="fcBack">'+_esc(c.a)+'</div>'+
+      '<p class="fcHint" style="color:#6b7280;font-size:11px;margin:8px 0 0;pointer-events:none">Tap to reveal ▾</p>'+
+    '</div>';
+  });
+  document.getElementById('fvCards').innerHTML=html||'<p style="color:#6b7280;text-align:center;padding:32px 0">No cards in this set</p>';
+  document.getElementById('flashViewModal').classList.add('open');
+}
+function closeFlashViewModal(){document.getElementById('flashViewModal').classList.remove('open');}
+
+async function _openFcSet(id){
+  if(_fcSetCache[id]){openFlashSet(_fcSetCache[id]);return;}
+  showLoading('Loading…');
+  var items=await getFromFirebase('examFlashcards',200);
+  hideLoading();
+  items.forEach(function(it){_fcSetCache[it.id]=it;});
+  if(_fcSetCache[id]) openFlashSet(_fcSetCache[id]);
+}
+
+function openTipModal(){document.getElementById('tipContent').value='';document.getElementById('tipModal').classList.add('open');}
+function closeTipModal(){document.getElementById('tipModal').classList.remove('open');}
+async function submitTip(){
+  var c=document.getElementById('tipContent').value.trim();
+  if(!c){showToast('Write a tip','error');return;}
+  showLoading('Posting…');
+  var r=await saveToFirebase('examTips',{content:c,author:currentUser?currentUser.email:'Anonymous',authorId:currentUser?currentUser.uid:'anon',timestamp:Date.now()});
+  hideLoading();
+  if(r.success){showToast('Tip posted!');closeTipModal();_examLoaded['tips']=false;loadExamTab('tips');}
+  else showToast('Post failed','error');
+}
+
+async function loadExamTab(tab){
+  if(tab==='pq') await _loadFileGrid('examPQ','pqGrid','Past Questions');
+  else if(tab==='books') await _loadFileGrid('examBooks','booksGrid','Textbooks');
+  else if(tab==='guides') await _loadGuides();
+  else if(tab==='flash') await _loadFlash();
+  else if(tab==='tips') await _loadTips();
+}
+
+async function _loadFileGrid(fbPath,gridId,label){
+  showLoading('Loading…');
+  var items=await getFromFirebase(fbPath,100);
+  hideLoading();
+  var grid=document.getElementById(gridId);
+  if(!grid)return;
+  if(!items.length){grid.innerHTML='<div class="emptyMsg">No '+label+' yet. Be the first!</div>';return;}
+  grid.innerHTML=items.map(function(it){
+    var isPDF=it.fileType==='application/pdf'||(it.fileUrl||'').endsWith('.pdf');
+    var isImg=it.fileType&&it.fileType.startsWith('image/');
+    var isOwner=currentUser&&currentUser.uid===it.authorId;
+    var thumb=isImg
+      ?'<div style="height:120px;border-radius:10px 10px 0 0;overflow:hidden"><img src="'+_esc(it.fileUrl)+'" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>'
+      :isPDF
+      ?'<div style="height:120px;background:linear-gradient(135deg,#1e1b4b,#312e81);border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:center"><span style="font-size:40px">📄</span></div>'
+      :'<div style="height:120px;background:#1f2937;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:center"><span style="font-size:40px">📁</span></div>';
+    var click=it.fileUrl?"viewFile('"+_esc(it.fileUrl)+"','"+_esc(it.fileType||'')+"','"+it.name.replace(/'/g,'&#39;')+"','"+it.id+"','"+fbPath+"')":'';
+    return '<div class="asgCard" onclick="'+click+'">'+thumb+
+      '<div style="padding:10px 12px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">'+
+          '<div style="flex:1;min-width:0">'+
+            '<p style="color:#f9fafb;font-weight:700;font-size:14px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(it.name)+'</p>'+
+            (it.course?'<p style="color:#a78bfa;font-size:11px;margin:3px 0 0">'+_esc(it.course)+'</p>':'')+
+          '</div>'+
+          (isOwner?'<button class="delBtn" onclick="event.stopPropagation();_deleteUpload(\''+it.id+'\',\''+fbPath+'\',this)">🗑</button>':'')+
+        '</div>'+
+        '<p style="color:#9ca3af;font-size:11px;margin:6px 0 0">By '+_esc(it.author)+'</p>'+
+      '</div></div>';
+  }).join('');
+}
+
+async function _loadGuides(){
+  showLoading('Loading…');
+  var items=await getFromFirebase('examGuides',100);
+  hideLoading();
+  var grid=document.getElementById('guidesGrid');
+  if(!grid)return;
+  if(!items.length){grid.innerHTML='<div class="emptyMsg">No study guides yet. Add one!</div>';return;}
+  grid.innerHTML=items.map(function(it){
+    var isOwner=currentUser&&currentUser.uid===it.authorId;
+    return '<div class="sgCard">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px">'+
+        '<p style="color:#f9fafb;font-weight:700;font-size:15px;margin:0">'+_esc(it.name)+'</p>'+
+        (isOwner?'<button class="delBtn" onclick="_deleteUpload(\''+it.id+'\',\'examGuides\',this)">🗑</button>':'')+
+      '</div>'+
+      '<p style="color:#d1d5db;font-size:14px;margin:0;white-space:pre-wrap;line-height:1.6">'+_esc(it.content)+'</p>'+
+      '<p style="color:#6b7280;font-size:11px;margin:10px 0 0">By '+_esc(it.author)+'</p>'+
+    '</div>';
+  }).join('');
+}
+
+async function _loadFlash(){
+  showLoading('Loading…');
+  var items=await getFromFirebase('examFlashcards',100);
+  hideLoading();
+  var grid=document.getElementById('flashGrid');
+  if(!grid)return;
+  if(!items.length){grid.innerHTML='<div class="emptyMsg">No flashcard sets yet. Create one!</div>';return;}
+  grid.innerHTML=items.map(function(it){
+    var bg=it.color||'linear-gradient(135deg,#ec4899,#8b5cf6)';
+    var cnt=it.cardCount||(it.cards?it.cards.length:0);
+    var isOwner=currentUser&&currentUser.uid===it.authorId;
+    return '<div class="fcSetCard" style="background:'+bg+'" onclick="_openFcSet(\''+it.id+'\')">'+
+      '<div>'+
+        '<p style="color:rgba(255,255,255,.75);font-size:10px;font-weight:700;margin:0 0 4px;text-transform:uppercase;letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(it.author)+'</p>'+
+        '<p style="color:#fff;font-size:14px;font-weight:800;margin:0;line-height:1.3">'+_esc(it.topic||'Flashcard Set')+'</p>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:12px">'+
+        '<span style="color:rgba(255,255,255,.85);font-size:12px;font-weight:700">⚡ '+cnt+' card'+(cnt!==1?'s':'')+'</span>'+
+        (isOwner?'<button class="delBtn" onclick="event.stopPropagation();_deleteUpload(\''+it.id+'\',\'examFlashcards\',this)" style="background:rgba(0,0,0,.35);border:none">🗑</button>':'')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+async function _loadTips(){
+  showLoading('Loading…');
+  var items=await getFromFirebase('examTips',100);
+  hideLoading();
+  var grid=document.getElementById('tipsGrid');
+  if(!grid)return;
+  if(!items.length){grid.innerHTML='<div class="emptyMsg">No tips yet. Share one!</div>';return;}
+  var colors=['#ec4899','#8b5cf6','#06b6d4','#f59e0b','#a78bfa'];
+  grid.innerHTML=items.map(function(it,i){
+    var isOwner=currentUser&&currentUser.uid===it.authorId;
+    return '<div class="tipCard" style="border-left-color:'+colors[i%colors.length]+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+        '<p style="color:#f9fafb;font-size:14px;margin:0;white-space:pre-wrap;line-height:1.6;flex:1">'+_esc(it.content)+'</p>'+
+        (isOwner?'<button class="delBtn" onclick="_deleteUpload(\''+it.id+'\',\'examTips\',this)">🗑</button>':'')+
+      '</div>'+
+      '<p style="color:#6b7280;font-size:11px;margin:8px 0 0">— '+_esc(it.author)+'</p>'+
+    '</div>';
+  }).join('');
+}
+
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function _showPrev(id,name){var el=document.getElementById(id);el.style.display='';el.innerHTML='<p style="color:#34d399;font-size:13px;margin:0">✓ '+_esc(name)+'</p>';}
+
+['addModal','examFileModal','guideModal','flashModal','flashViewModal','tipModal'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el) el.addEventListener('click',function(e){if(e.target===el)el.classList.remove('open');});
+});
+
+document.addEventListener('DOMContentLoaded',function(){
+  loadAssignments(document.getElementById('assignmentsGrid'));
+});
+</script>
+
+  <script>
+  (function(){
+    'use strict';
+    function initLectureAlarms(){
+      if(typeof firebase==='undefined'||!firebase.apps||!firebase.apps.length) return;
+      var db=firebase.database();
+      db.ref('lecture_alarms').on('child_added',function(snap){
+        var alarm=snap.val(); if(!alarm||!alarm.time) return;
+        var id=snap.key; var fireAt=new Date(alarm.time); var now=new Date();
+        var dismissed=JSON.parse(localStorage.getItem('_dismissed_alarms')||'{}');
+        if(dismissed[id]) return;
+        if(fireAt<=now){ if((now-fireAt)<600000) AlarmManager&&AlarmManager.showInAppBanner&&AlarmManager.showInAppBanner(alarm.title||'Lecture Now',alarm.body||'',''); return; }
+        if(window.AlarmManager&&AlarmManager.scheduleLectureAlarm){
+          AlarmManager.scheduleLectureAlarm({id:parseInt(id.replace(/\D/g,'').slice(-6))||Math.floor(Math.random()*999999),title:alarm.title||'Lecture Reminder',body:alarm.body||'Lecture starting soon!',fireAt:fireAt,lectureRef:id,page:'pages/assignment.html'});
+        }
+        _renderAlarm(id,alarm,fireAt);
+      });
+      db.ref('lecture_alarms').on('child_removed',function(snap){var el=document.getElementById('_alarm_'+snap.key);if(el)el.remove();});
+    }
+
+    function _renderAlarm(id,alarm,fireAt){
+      var container=document.getElementById('_alarmList');
+      if(!container){container=document.createElement('div');container.id='_alarmList';container.style.cssText='padding:12px 16px;display:flex;flex-direction:column;gap:10px';var main=document.querySelector('main')||document.querySelector('#mainContent')||document.body;main.prepend(container);}
+      if(document.getElementById('_alarm_'+id)) return;
+      var card=document.createElement('div'); card.id='_alarm_'+id;
+      card.style.cssText='background:linear-gradient(135deg,rgba(147,51,234,.15),rgba(236,72,153,.1));border:1px solid rgba(236,72,153,.35);border-radius:16px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px';
+      card.innerHTML='<div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div><div style="flex:1;min-width:0"><div style="color:#f9fafb;font-weight:700;font-size:14px;margin-bottom:3px">'+(alarm.title||'Lecture Alarm')+'</div><div style="color:#d1d5db;font-size:12px;margin-bottom:2px">'+(alarm.body||'')+'</div><div style="color:#9ca3af;font-size:11px">⏰ '+fireAt.toLocaleString()+'</div></div><button onclick="_dismissAlarm(''+id+'')" style="background:rgba(255,255,255,.08);border:none;border-radius:8px;padding:6px;cursor:pointer;color:#9ca3af"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+      container.prepend(card);
+    }
+
+    window._dismissAlarm=function(id){var el=document.getElementById('_alarm_'+id);if(el)el.remove();if(window.AlarmManager)AlarmManager.cancelAlarm(parseInt(id.replace(/\D/g,'').slice(-6))||0);var d=JSON.parse(localStorage.getItem('_dismissed_alarms')||'{}');d[id]=true;localStorage.setItem('_dismissed_alarms',JSON.stringify(d));};
+
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initLectureAlarms);
+    else initLectureAlarms();
+    document.addEventListener('deviceready',initLectureAlarms,false);
+  })();
+  </script>
+  <script>
+  // Bug 5 fix: save & restore assignment page savepoint (active tab + scroll position)
+  (function(){
+    var _sp_key = 'assignment';
+    var _sp_timer = null;
+    function _saveSP(){
+      if(typeof OfflineDB === 'undefined') return;
+      var activeTab = '';
+      var activeBtn = document.querySelector('.modeBtn.active');
+      if(activeBtn) activeTab = activeBtn.textContent || '';
+      var scrollEl = document.documentElement || document.body;
+      OfflineDB.saveSavepoint(_sp_key, { scrollTop: scrollEl.scrollTop, tab: activeTab, savedAt: Date.now() });
+    }
+    function _debounceSave(){ clearTimeout(_sp_timer); _sp_timer = setTimeout(_saveSP, 800); }
+    // Restore on load
+    function _restoreSP(){
+      if(typeof OfflineDB === 'undefined') return;
+      OfflineDB.getSavepoint(_sp_key).then(function(sp){
+        if(!sp || !sp.data) return;
+        if(sp.data.scrollTop){ setTimeout(function(){ (document.documentElement||document.body).scrollTop = sp.data.scrollTop; }, 600); }
+      });
+    }
+    window.addEventListener('scroll', _debounceSave, { passive: true });
+    document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveSP(); });
+    // Hook into mode toggle clicks
+    document.addEventListener('click', function(e){ if(e.target && e.target.classList && e.target.classList.contains('modeBtn')) setTimeout(_saveSP, 200); });
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _restoreSP);
+    else _restoreSP();
+  })();
+  </script>
+</body>
+</html>

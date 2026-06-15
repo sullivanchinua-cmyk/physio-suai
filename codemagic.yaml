@@ -1,0 +1,84 @@
+workflows:
+  android-release:
+    name: Physio SUAI – Android Release Build
+    max_build_duration: 60
+    environment:
+      android_signing:
+        - physio_suai_keystore
+      groups:
+        - physio_suai_env
+      vars:
+        PACKAGE_NAME: "com.physiosuai.app"
+      java: 17
+
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+
+    scripts:
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+
+      - name: Set up Google Services JSON
+        script: |
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+
+      - name: Set keystore file
+        script: |
+          echo $CM_KEYSTORE | base64 --decode > $CM_KEYSTORE_PATH
+
+      - name: Install Node dependencies
+        script: |
+          npm install
+
+      - name: Sync Capacitor
+        script: |
+          npx cap sync android
+
+      - name: Build Android Release APK & AAB
+        script: |
+          cd android
+          ./gradlew bundleRelease assembleRelease
+
+      - name: Sign the APK
+        script: |
+          cd android/app/build/outputs/apk/release
+          jarsigner \
+            -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore $CM_KEYSTORE_PATH \
+            -storepass $CM_KEYSTORE_PASSWORD \
+            -keypass $CM_KEY_PASSWORD \
+            app-release-unsigned.apk "$CM_KEY_ALIAS"
+          zipalign -v 4 app-release-unsigned.apk physio-suai-release.apk
+
+      - name: Sign the AAB
+        script: |
+          jarsigner \
+            -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore $CM_KEYSTORE_PATH \
+            -storepass $CM_KEYSTORE_PASSWORD \
+            -keypass $CM_KEY_PASSWORD \
+            android/app/build/outputs/bundle/release/app-release.aab "$CM_KEY_ALIAS"
+
+    artifacts:
+      - android/app/build/outputs/apk/release/physio-suai-release.apk
+      - android/app/build/outputs/bundle/release/app-release.aab
+      - android/app/build/outputs/mapping/release/mapping.txt
+
+    publishing:
+      email:
+        recipients:
+          - sullivan@physiosuai.app
+        notify:
+          success: true
+          failure: true

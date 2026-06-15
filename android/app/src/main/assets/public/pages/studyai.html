@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <!-- Capacitor runtime (injected by build) -->
+    <script src="../capacitor.js"></script>
+    <!-- Physio SUAI Capacitor modules -->
+    <script src="../js/capacitor-bridge.js"></script>
+    <script src="../js/dexie-offline.js"></script>
+    <script src="../js/alarm-manager.js"></script>
+    <script src="../js/background-audio.js"></script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+  <title>Study AI – Physio SUAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- No aws4fetch needed: upload uses built-in crypto.subtle -->
+  <script src="../js/hybrid-config.js"></script>
+  <script src="../js/file-preview.js"></script>
+  <script src="../js/attach-menu.js"></script>
+  <script src="../js/chat-theme.js"></script>
+  <style>
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;margin:0;padding:0;overflow:hidden;background:#111827;color:#e5e7eb}
+    body{display:flex;flex-direction:column;width:100%;max-width:100vw;overflow-x:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    #messages{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px 12px 8px;-webkit-overflow-scrolling:touch;min-height:0}
+    #messages::-webkit-scrollbar{width:3px}
+    #messages::-webkit-scrollbar-thumb{background:#374151;border-radius:2px}
+    /* ── Typing dots ── */
+    .tdot{width:8px;height:8px;border-radius:50%;background:#8b5cf6;display:inline-block;margin:0 2px;animation:td 1.4s infinite ease-in-out}
+    .tdot:nth-child(2){animation-delay:.22s}
+    .tdot:nth-child(3){animation-delay:.44s}
+    @keyframes td{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-8px)}}
+    /* ── Bubbles ── */
+    .ai-bubble strong,.ai-bubble b{color:#c4b5fd}
+    .ai-bubble em,.ai-bubble i{color:#93c5fd}
+    .ai-bubble code{background:#1f2937;border:1px solid #374151;padding:1px 5px;border-radius:5px;font-size:12.5px;font-family:monospace}
+    .ai-bubble pre{background:#1f2937;border:1px solid #374151;border-radius:10px;padding:10px 12px;overflow-x:auto;font-size:13px;margin:8px 0;white-space:pre-wrap;word-break:break-word}
+    @keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .msg-enter{animation:msgIn .22s ease both}
+    /* ── Quick chips ── */
+    .chip{background:#1f2937;border:1.5px solid #374151;color:#d1d5db;padding:8px 14px;border-radius:20px;font-size:13px;cursor:pointer;white-space:nowrap;transition:border-color .18s,color .18s;-webkit-tap-highlight-color:transparent}
+    .chip:hover,.chip:active{border-color:#8b5cf6;color:#e9d5ff}
+    /* ── File preview bar ── */
+    #fileBar{display:none;background:#1f2937;border-top:1px solid #374151;padding:8px 12px;flex-shrink:0}
+    /* ── Input bar ── */
+    #inputBar{background:#1f2937;border-top:1px solid #374151;padding:6px 10px;flex-shrink:0}
+    .irow{display:flex;align-items:flex-end;gap:8px;max-width:700px;margin:0 auto}
+    .ipill{flex:1;min-width:0;display:flex;align-items:center;background:#111827;border:1.5px solid #374151;border-radius:24px;padding:4px 8px 4px 16px;gap:4px;transition:border-color .2s}
+    .ipill:focus-within{border-color:#8b5cf6}
+    #aiInp{flex:1;min-width:0;background:none;border:none;outline:none;color:#e5e7eb;font-size:15px;padding:8px 2px;font-family:inherit}
+    #aiInp::placeholder{color:#6b7280}
+    .ib{width:36px;height:36px;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#8696a0;flex-shrink:0;border-radius:50%;padding:0}
+    .ib:active{background:rgba(255,255,255,.08)}
+    .ib svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    #sendBtn{width:50px;height:50px;min-width:50px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 10px rgba(139,92,246,.4);transition:transform .1s,opacity .2s;transform:scale(0);opacity:0}
+    #sendBtn.show{transform:scale(1);opacity:1}
+    #sendBtn svg{width:22px;height:22px;fill:white}
+    /* Loading */
+    #loadingOverlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);align-items:center;justify-content:center}
+    #loadingOverlay:not(.hidden){display:flex}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+<!-- ── NAV ──────────────────────────────────────────────────────────── -->
+<nav style="background:#1f2937;border-bottom:1px solid #374151;padding:10px 12px;flex-shrink:0;position:sticky;top:0;z-index:40">
+  <div style="max-width:700px;margin:0 auto;display:flex;align-items:center;gap:10px">
+    <button onclick="location.href='../home.html'" style="width:38px;height:38px;background:#111827;border:1.5px solid #374151;border-radius:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#e5e7eb;flex-shrink:0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🤖</div>
+    <div style="flex:1;min-width:0">
+      <p style="font-weight:700;font-size:15px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Physio AI</p>
+      <p style="font-size:11px;margin:0;font-weight:600" id="aiStatusLine" style="color:#34d399">● Powered by Gemini</p>
+    </div>
+    <div style="position:relative">
+      <button onclick="toggleAiMenu()" style="width:38px;height:38px;background:#111827;border:1.5px solid #374151;border-radius:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#9ca3af;flex-shrink:0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </button>
+      <div id="aiDrop" style="display:none;position:absolute;right:0;top:46px;background:#1f2937;border:1.5px solid #374151;border-radius:16px;padding:6px;min-width:220px;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,.6)">
+        <button onclick="clearChat();closeAiMenu()" class="ctx-i">🗑️ Clear Chat</button>
+        <button onclick="openTimetableMode();closeAiMenu()" class="ctx-i">📅 Exam Timetable Analyser</button>
+        <button onclick="closeAiMenu()" class="ctx-i" style="color:#6b7280;font-size:13px">✕ Close</button>
+      </div>
+    </div>
+  </div>
+</nav>
+<style>
+.ctx-i{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;cursor:pointer;border-radius:10px;color:#e5e7eb;font-size:14px;text-align:left;-webkit-tap-highlight-color:transparent}
+.ctx-i:hover,.ctx-i:active{background:#374151}
+</style>
+<!-- ── MESSAGES ────────────────────────────────────────────────────── -->
+<div id="messages" onclick="closeAiMenu()"></div>
+<!-- ── TYPING ─────────────────────────────────────────────────────── -->
+<div id="typingRow" style="display:none;padding:6px 14px;flex-shrink:0">
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🤖</div>
+    <div style="background:#1f2937;border:1px solid #374151;border-radius:18px 18px 18px 4px;padding:10px 14px;display:inline-block">
+      <span class="tdot"></span><span class="tdot"></span><span class="tdot"></span>
+    </div>
+  </div>
+</div>
+<!-- ── FILE PREVIEW BAR ────────────────────────────────────────────── -->
+<div id="fileBar">
+  <div style="display:flex;align-items:center;gap:10px;background:#374151;border-radius:12px;padding:8px 12px">
+    <span id="fbIcon" style="font-size:20px;flex-shrink:0">📎</span>
+    <div style="flex:1;min-width:0">
+      <p id="fbName" style="font-size:13px;color:#d1d5db;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+      <p id="fbSize" style="font-size:11px;color:#6b7280;margin:0"></p>
+    </div>
+    <button onclick="clearPendingAI()" style="background:none;border:none;cursor:pointer;color:#f87171;font-size:20px;line-height:1;flex-shrink:0;padding:2px">✕</button>
+  </div>
+</div>
+<!-- ── INPUT BAR ───────────────────────────────────────────────────── -->
+<div id="inputBar">
+  <div class="irow">
+    <div class="ipill">
+      <!-- Attach pin -->
+      <button class="ib" onclick="openAIAttach()" title="Attach">
+        <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <!-- Text input -->
+      <input id="aiInp" type="text" placeholder="Ask about physio, anatomy, exams…"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();doSend()}"
+        oninput="aiTyping()">
+      <!-- Camera -->
+      <button class="ib" onclick="openAICamera()" title="Photo">
+        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </button>
+    </div>
+    <!-- Send button (purple/pink) -->
+    <button id="sendBtn" onclick="doSend()">
+      <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+<!-- Loading -->
+<div id="loadingOverlay" class="hidden"><div style="text-align:center"><div style="width:44px;height:44px;border:4px solid #8b5cf6;border-top:4px solid transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto"></div><p class="loading-text" style="color:#fff;margin-top:12px;font-size:14px">Loading…</p></div></div>
+<script src="../js/main.js"></script>
+<script>
+// ════════════════════════════════════════════════════════════════
+//  PHYSIO AI — Gemini-powered Study Assistant
+//  Specialised in Physiotherapy & SUAI Nigeria exams
+// ════════════════════════════════════════════════════════════════
+var GEMINI_KEY = 'AIzaSyB9Ap4XhekePy7M3lBW6YaBmArYluK_DGc';
+var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + GEMINI_KEY;
+// ── Deep physio system prompt ──────────────────────────────────
+var PHYSIO_SYSTEM = [
+  'You are PHYSIO AI — the intelligent study assistant for students at SUAI Nigeria.',
+  '',
+  '== YOUR EXPERTISE ==',
+  'You are a versatile academic AI with deep knowledge in ALL subjects, with special depth in physiotherapy:',
+  '• Anatomy & Physiology, Kinesiology, Biomechanics, Musculoskeletal & Neurological Physiotherapy',
+  '• Cardiorespiratory Physiotherapy, Paediatric & Geriatric Physiotherapy, Sports Physiotherapy',
+  '• Electrotherapy & Physical Agents (TENS, ultrasound, diathermy, laser)',
+  '• Therapeutic Exercise & Rehab (FITT, SAID), Clinical Assessment (SOAP, MMT, goniometry)',
+  '• Orthopaedic conditions, fractures, post-op rehab, pharmacology basics relevant to physio',
+  '• Mathematics (algebra, calculus, statistics, arithmetic, geometry, trigonometry)',
+  '• Physics (mechanics, thermodynamics, electromagnetism, optics, waves, modern physics)',
+  '• Chemistry (organic, inorganic, physical, biochemistry, stoichiometry, bonding)',
+  '• Biology, Microbiology, Biochemistry, Pathology',
+  '• General science, research methods, data analysis',
+  '• English, essay writing, grammar, academic writing',
+  '• Nigerian healthcare system context (SUAI, ESUT, UNTH)',
+  '',
+  '== MATHEMATICS & CALCULATIONS ==',
+  'When given a calculation or math question:',
+  '• Solve it step-by-step, showing all working clearly',
+  '• State the formula used, substitute values, simplify',
+  '• Give the final answer with correct units',
+  '• For medical calculations (drug dosages, heart rate targets, BMI), relate to clinical context',
+  '',
+  '== EXAM TIMETABLE ANALYSIS ==',
+  'When given an image of an exam timetable:',
+  '1. Extract ALL exam entries: course name/code, date, time, venue',
+  '2. Sort them chronologically',
+  '3. For each subject, give: Key topics to revise, mnemonics, study hours, revision tips',
+  '4. Create a day-by-day study schedule working backward from first exam',
+  '',
+  '== FORMATTING ==',
+  'Use clear markdown formatting:',
+  '• **Bold** for key terms, diagnoses, important concepts',
+  '• Bullet points for lists; Numbered lists for steps/procedures',
+  '• Mnemonics in *italics*',
+  '• Use emojis sparingly (🦴 anatomy, 💪 exercise, 🧠 neuro, 📋 assessment, 🔢 maths, ⚗️ chemistry, ⚡ physics)',
+  '',
+  '== STYLE ==',
+  '• Be encouraging and supportive — Nigerian students work incredibly hard',
+  '• Give practical examples to make theory stick',
+  '• For non-academic casual chat, be friendly and helpful',
+  '• Always answer the question asked — never refuse or redirect'
+].join('\n');
+// ── State ──────────────────────────────────────────────────────
+var busy = false, msgCount = 0;
+var _pendingB64 = null, _pendingMime = null, _pendingFile = null;
+// ── Menu ───────────────────────────────────────────────────────
+function toggleAiMenu() {
+  var d = document.getElementById('aiDrop');
+  d.style.display = d.style.display === 'none' ? 'block' : 'none';
+}
+function closeAiMenu() {
+  var d = document.getElementById('aiDrop');
+  if(d) d.style.display = 'none';
+}
+document.addEventListener('click', function(e) {
+  var d = document.getElementById('aiDrop');
+  if(d && d.style.display !== 'none' && !e.target.closest('[onclick*="toggleAiMenu"]') && !d.contains(e.target)) closeAiMenu();
+});
+// ── Attach ─────────────────────────────────────────────────────
+function openAIAttach() {
+  showAttachMenu(function(file, type, extra) {
+    if (!file && extra) {
+      // text from poll/event — just put in input
+      document.getElementById('aiInp').value = extra;
+      aiTyping(); return;
+    }
+    if (!file) return;
+    setPendingFile(file);
+    if (!document.getElementById('aiInp').value.trim()) {
+      if (file.type.startsWith('image/')) document.getElementById('aiInp').value = 'Analyze this image for my physio studies';
+      else document.getElementById('aiInp').value = 'Help me with: ' + file.name;
+    }
+    aiTyping();
+  }, { timetable: true });
+}
+function openAICamera() {
+  if (window.Android) { window.Android.openCamera(); return; }
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture','environment'); inp.capture='environment';
+  inp.onchange = function() {
+    if(!inp.files[0]) return;
+    var _f=inp.files[0];
+    if(typeof showFilePreview==='function' && (_f.type.startsWith('image/') || _f.type.startsWith('video/'))){
+      showFilePreview(_f,function(f){ setPendingFile(f); aiTyping(); });
+    } else { setPendingFile(_f); aiTyping(); }
+  };
+  inp.click();
+}
+// Called by Android native bridge
+window.onNativeFile = function(b64, mime, name) {
+  try {
+    var bytes = atob(b64); var arr = new Uint8Array(bytes.length);
+    for (var i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+    var file = new File([new Blob([arr],{type:mime})], name||('img_'+Date.now()+'.jpg'), {type:mime});
+    setPendingFile(file);
+    if (!document.getElementById('aiInp').value.trim())
+      document.getElementById('aiInp').value = 'Analyze this for my physio studies';
+    aiTyping();
+  } catch(e) {}
+};
+function setPendingFile(file) {
+  _pendingFile = file; _pendingMime = file.type; _pendingB64 = null;
+  var icon = file.type.startsWith('image/')?'🖼️':file.type.includes('pdf')?'📄':'📎';
+  document.getElementById('fbIcon').textContent = icon;
+  document.getElementById('fbName').textContent = file.name;
+  document.getElementById('fbSize').textContent = (file.size/1024).toFixed(1)+' KB · '+file.type.split('/')[0];
+  document.getElementById('fileBar').style.display = 'block';
+  // Read image as base64 for vision API
+  if (file.type.startsWith('image/')) {
+    var r = new FileReader(); r.onload = function(ev) {
+      _pendingB64 = ev.target.result.split(',')[1];
+    }; r.readAsDataURL(file);
+  }
+}
+function clearPendingAI() {
+  _pendingFile=null; _pendingB64=null; _pendingMime=null;
+  document.getElementById('fileBar').style.display='none';
+  aiTyping();
+}
+// ── Typing state ───────────────────────────────────────────────
+function aiTyping() {
+  var val = document.getElementById('aiInp').value;
+  var btn = document.getElementById('sendBtn');
+  var show = val.trim().length>0 || !!_pendingFile;
+  if(show) btn.classList.add('show'); else btn.classList.remove('show');
+}
+// ── Send ───────────────────────────────────────────────────────
+function doSend() {
+  if (busy) return;
+  var inp = document.getElementById('aiInp');
+  var q = (inp.value||'').trim();
+  if (!q && !_pendingFile) return;
+  inp.value=''; aiTyping();
+  var displayQ = q || (_pendingFile?'📎 '+_pendingFile.name:'');
+  showMsg('user', displayQ);
+  var file = _pendingFile, b64 = _pendingB64, mime = _pendingMime;
+  clearPendingAI();
+  setTyping(true); busy=true;
+  if (b64 && mime && mime.startsWith('image/')) {
+    callGeminiVision(q || 'Please analyze this image for my physiotherapy studies. Identify any relevant anatomy, pathology, or clinical information.', b64, mime);
+  } else if (file) {
+    callGemini('[File attached: '+file.name+' ('+file.type+')]\n\n'+(q||'Please help me understand this file in the context of physiotherapy studies.'));
+  } else {
+    callGemini(q);
+  }
+}
+// ── Gemini text ────────────────────────────────────────────────
+function callGemini(question) {
+  var payload = {
+    contents: [{
+      role: 'user',
+      parts: [{ text: PHYSIO_SYSTEM + '\n\n---\nStudent question: ' + question }]
+    }],
+    generationConfig: { maxOutputTokens: 1200, temperature: 0.7, topP: 0.9 },
+    safetySettings: [
+      {category:'HARM_CATEGORY_HARASSMENT',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_HATE_SPEECH',threshold:'BLOCK_NONE'},
+      {category:'HARM_CATEGORY_SEXUALLY_EXPLICIT',threshold:'BLOCK_MEDIUM_AND_ABOVE'},
+      {category:'HARM_CATEGORY_DANGEROUS_CONTENT',threshold:'BLOCK_NONE'}
+    ]
+  };
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+    .then(function(r){return r.json();})
+    .then(function(data){
+      setTyping(false); busy=false;
+      var ans=''; try{ans=data.candidates[0].content.parts[0].text;}catch(e){}
+      if(ans){ showMsg('ai',ans,'Gemini'); setStatus('● Gemini · Online','#34d399'); }
+      else { showMsg('ai',getOffline(question),'Offline'); setStatus('● Offline','#f59e0b'); }
+    })
+    .catch(function(){
+      setTyping(false); busy=false;
+      showMsg('ai',getOffline(question),'Offline'); setStatus('● Offline','#f59e0b');
+    });
+}
+// ── Gemini Vision ──────────────────────────────────────────────
+function callGeminiVision(question, b64, mime) {
+  var isTimetable = question.toLowerCase().includes('timetable') || question.toLowerCase().includes('exam schedule') || question.toLowerCase().includes('schedule');
+  var promptPrefix = isTimetable
+    ? 'This is an exam timetable image. ' + PHYSIO_SYSTEM + '\n\n---\nTask: '
+    : PHYSIO_SYSTEM + '\n\n---\nStudent sent an image. Task: ';
+  var payload = {
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: promptPrefix + question },
+        { inlineData: { mimeType: mime, data: b64 } }
+      ]
+    }],
+    generationConfig: { maxOutputTokens: 1500, temperature: 0.5 }
+  };
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+    .then(function(r){return r.json();})
+    .then(function(data){
+      setTyping(false); busy=false;
+      var ans=''; try{ans=data.candidates[0].content.parts[0].text;}catch(e){}
+      if(ans){ showMsg('ai',ans,'Gemini Vision'); setStatus('● Gemini Vision · Online','#34d399'); }
+      else{ showMsg('ai','⚠️ Could not analyze the image. Try again or describe what you need.','Error'); setStatus('● Error','#ef4444'); }
+    })
+    .catch(function(){
+      setTyping(false); busy=false;
+      showMsg('ai','⚠️ Image analysis failed. Check your internet connection.','Offline');
+    });
+}
+// ── Status line ────────────────────────────────────────────────
+function setStatus(txt, color) {
+  var el = document.getElementById('aiStatusLine');
+  if(el){ el.textContent=txt; el.style.color=color; }
+}
+// ── Timetable mode ─────────────────────────────────────────────
+function openTimetableMode() {
+  var c=document.getElementById('messages');
+  var d=document.createElement('div');
+  d.className='msg-enter';
+  d.style.cssText='margin:10px 0';
+  d.innerHTML='<div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border:1.5px solid #6366f1;border-radius:18px;padding:20px;text-align:center">' +
+    '<div style="font-size:44px;margin-bottom:10px">📅</div>' +
+    '<p style="font-weight:800;font-size:17px;color:#fff;margin:0 0 8px">Exam Timetable Analyser</p>' +
+    '<p style="font-size:13px;color:#a5b4fc;margin:0 0 18px;line-height:1.6">Upload a photo of your exam timetable. I will:<br>✅ Extract every exam date, time & venue<br>✅ Give you a study plan for each subject<br>✅ Suggest key topics & mnemonics</p>' +
+    '<button onclick="openTimetableAttach()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-weight:700;padding:13px 30px;border-radius:14px;border:none;cursor:pointer;font-size:14px;-webkit-tap-highlight-color:transparent">📷 Upload My Timetable</button>' +
+  '</div>';
+  c.appendChild(d); c.scrollTop=c.scrollHeight;
+}
+function openTimetableAttach() {
+  showAttachMenu(function(file) {
+    if (!file) return;
+    setPendingFile(file);
+    document.getElementById('aiInp').value = 'This is my exam timetable. Please read every exam entry carefully — get the course name, date, time and venue for each one. Then create a detailed study plan for each physiotherapy subject: key topics to cover, useful mnemonics, and how many hours to allocate based on how soon the exam is.';
+    aiTyping();
+    document.getElementById('aiInp').focus();
+  }, { timetable: true });
+}
+// ── Render messages ────────────────────────────────────────────
+function showMsg(role, text, provider) {
+  var c=document.getElementById('messages'); if(!c) return;
+  var div=document.createElement('div');
+  div.id='msg_'+(++msgCount); div.className='msg-enter';
+  // Format markdown
+  var fmt = String(text)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`([^`\n]+)`/g,'<code>$1</code>')
+    .replace(/^#{1,3}\s+(.+)$/gm,'<strong style="font-size:15px;color:#c4b5fd">$1</strong>')
+    .replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
+  if(role==='user'){
+    div.style.cssText='display:flex;justify-content:flex-end;margin-bottom:6px';
+    div.innerHTML='<div style="max-width:82%;min-width:0">' +
+      '<div style="background:linear-gradient(135deg,#7c3aed,#ec4899);border-radius:18px 18px 4px 18px;padding:11px 14px 11px;font-size:14.5px;line-height:1.5;word-break:break-word;color:#fff">'+fmt+'</div>' +
+      '<p style="font-size:11px;color:#4b5563;text-align:right;margin:3px 4px 0">You</p>' +
+    '</div>';
+  } else {
+    div.style.cssText='display:flex;align-items:flex-start;gap:8px;margin-bottom:6px';
+    div.innerHTML=
+      '<div style="width:34px;height:34px;min-width:34px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;font-size:15px">🤖</div>'+
+      '<div style="flex:1;min-width:0">' +
+        '<p style="font-size:11px;color:#8b5cf6;font-weight:700;margin:0 0 4px">Physio AI'+(provider?' <span style="color:#4b5563;font-weight:400">· '+provider+'</span>':'')+'</p>' +
+        '<div class="ai-bubble" style="background:#1f2937;border:1px solid #374151;border-radius:4px 18px 18px 18px;padding:11px 14px;font-size:14px;line-height:1.65;word-break:break-word;color:#e5e7eb">'+fmt+'</div>' +
+      '</div>';
+  }
+  c.appendChild(div); c.scrollTop=c.scrollHeight;
+}
+function setTyping(show) {
+  var t=document.getElementById('typingRow');
+  if(t){ t.style.display=show?'flex':'none'; }
+  if(show){ var c=document.getElementById('messages'); if(c) setTimeout(function(){c.scrollTop=c.scrollHeight;},60); }
+}
+function clearChat() {
+  msgCount=0; document.getElementById('messages').innerHTML=''; showWelcome();
+}
+// ── Offline answers ────────────────────────────────────────────
+function getOffline(q) {
+  q=(q||'').toLowerCase();
+  if(q.includes('muscle')||q.includes('mmt')) return '**Manual Muscle Testing (MMT) Grading:**\n\n• **Grade 0** — No muscle contraction\n• **Grade 1** — Flicker/trace of contraction\n• **Grade 2** — Full ROM gravity eliminated\n• **Grade 3** — Full ROM against gravity\n• **Grade 4** — ROM against some resistance\n• **Grade 5** — Normal strength, full resistance\n\n💪 *Mnemonic: "No Flicker? Two, Three, Four, Five!"*\n\nKey muscles: Deltoid (C5), Biceps (C5-C6), Triceps (C7), Quads (L3-L4), Gastroc (S1-S2)\n\n⚠️ *Offline mode — connect for full answers.*';
+  if(q.includes('spine')||q.includes('vertebra')||q.includes('back')) return '**Spinal Anatomy for Physio:**\n\n🦴 **Regions:**\n• Cervical: **7** vertebrae (C1-C7)\n• Thoracic: **12** vertebrae (T1-T12)\n• Lumbar: **5** vertebrae (L1-L5)\n• Sacrum (5 fused) + Coccyx (4 fused)\n\n*Mnemonic: "Breakfast at 7, Lunch at 12, Dinner at 5"*\n\n**Disc pathology:** herniation (posterolateral most common), degeneration, stenosis\n\n**Key landmarks:** C7 vertebra prominens, T3 = spine of scapula, L4 = iliac crests\n\n⚠️ *Offline mode.*';
+  if(q.includes('stroke')||q.includes('hemi')) return '**Stroke Rehabilitation (Physio):**\n\n🧠 **Phases:**\n• Acute (0-1 week): positioning, passive ROM, DVT prevention\n• Subacute (1-6 weeks): sitting balance, transfers, early gait\n• Chronic (>6 months): community reintegration, compensation strategies\n\n**Bobath / NDT principles** — handling, facilitation, inhibition\n**Task-specific training** — repetitive practice improves neuroplasticity\n\n**Common deficits:** hemiplegia, spasticity, neglect, dysphasia, dysphagia\n\n**Berg Balance Scale** — assesses fall risk (max 56; <45 = fall risk)\n\n⚠️ *Offline mode.*';
+  if(q.includes('soap')||q.includes('assessment')) return '**SOAP Note Format:**\n\n📋 **S — Subjective:**\nChief complaint, pain history (OPQRST), functional limitations, patient goals\n\n**O — Objective:**\nVitals, observation, palpation, ROM (goniometry), MMT, special tests, functional mobility\n\n**A — Assessment:**\nDiagnosis/impression, problem list, rehab potential\n\n**P — Plan:**\nSTG/LTG, treatment techniques, frequency, duration, HEP\n\n*Key special tests: Lachman, McMurray, Hawkins-Kennedy, Spurling, SLR, FABER, FADIR*\n\n⚠️ *Offline mode.*';
+  if(q.includes('exercise')||q.includes('rehab')||q.includes('fitt')) return '**FITT Principles for Physiotherapy Rehab:**\n\n💪 **F — Frequency:** 3-5×/week for strength; daily for ROM\n**I — Intensity:** 60-80% 1RM for strength; RPE 12-14/20\n**T — Time:** 20-60 min; strengthening 3×10-15 reps\n**T — Type:** Isometric → Isotonic → Isokinetic → Functional\n\n**SAID Principle:** Specific Adaptation to Imposed Demands\n**Progressive Overload:** Gradually increase load 2-5%/week\n**Closed vs Open Chain:** CKC = more co-contraction (e.g. squat); OKC = isolated (e.g. leg press)\n\n⚠️ *Offline mode.*';
+  if(q.includes('gait')) return '**Normal Gait Cycle (Physio):**\n\n🦵 **Stance Phase (60%):**\n1. Initial Contact (heel strike)\n2. Loading Response\n3. Mid Stance\n4. Terminal Stance\n5. Pre-swing (toe off)\n\n**Swing Phase (40%):**\n6. Initial Swing\n7. Mid Swing\n8. Terminal Swing\n\n**Normal cadence:** 100-120 steps/min\n**Normal walking speed:** 1.2-1.4 m/s\n\nCommon deviations: Trendelenburg, steppage, antalgic, scissor gait\n\n⚠️ *Offline mode.*';
+  if(q.includes('electrotherapy')||q.includes('tens')||q.includes('ultrasound')) return '**Electrotherapy Quick Reference:**\n\n⚡ **TENS (Transcutaneous Electrical Nerve Stimulation):**\n• Conventional: 80-150 Hz, low intensity, gate control\n• Acupuncture-like: 1-10 Hz, higher intensity, endorphin release\n\n**Ultrasound:**\n• Frequency: 1 MHz (deep, 3-5cm) or 3 MHz (superficial, 1-2cm)\n• Continuous = thermal; Pulsed = non-thermal\n• Intensity: 0.5-2.0 W/cm²\n\n**Interferential (IFT):** 4000 Hz carrier, beat frequency 0-250 Hz, pain & muscle re-education\n\n**Contraindications (all):** malignancy, pacemaker, thrombophlebitis, pregnancy (lumbar/pelvis)\n\n⚠️ *Offline mode.*';
+  if(q.includes('knee')||q.includes('acl')||q.includes('meniscus')) return '**Knee Rehabilitation (Physio):**\n\n**Key Special Tests:**\n• **ACL:** Lachman (most sensitive), Anterior Drawer, Pivot Shift\n• **PCL:** Posterior Drawer, Posterior Sag\n• **Meniscus:** McMurray, Thessaly, Apley Grind\n• **Collateral:** Valgus/Varus stress at 30°\n\n**Post-ACL Reconstruction Rehab (weeks):**\n• 0-2: Cryo, quad sets, SLR, heel slides\n• 2-6: PWB→FWB, closed chain, swelling control\n• 6-12: Strength progression, proprioception\n• 3-6m: Jogging, sport-specific\n• 6-9m: Return to sport (quad strength >85% limb symmetry)\n\n⚠️ *Offline mode.*';
+  return '**📵 Physio AI — Offline Mode**\n\nCannot reach Gemini right now. I know these topics offline:\n\n• **muscle** / **mmt** — Manual Muscle Testing\n• **spine** / **back** — Vertebral anatomy\n• **stroke** / **hemi** — Stroke rehab\n• **SOAP** — Clinical assessment\n• **exercise** / **fitt** — Rehab principles\n• **gait** — Gait cycle analysis\n• **electrotherapy** / **TENS** — Electrotherapy\n• **knee** / **ACL** — Knee assessment & rehab\n\nConnect to internet for full AI answers with images! 📸';
+}
+// ── Welcome message ────────────────────────────────────────────
+function showWelcome() {
+  showMsg('ai',
+    '👋 Hi! I\'m **Physio AI**, your dedicated study assistant for physiotherapy at SUAI Nigeria.\n\n' +
+    '🎓 I\'m trained to help you with:\n\n' +
+    '• 🦴 **Anatomy & Physiology** — bones, muscles, nerves, systems\n' +
+    '• 💪 **Rehab & Therapeutics** — exercises, FITT, SAID, progression\n' +
+    '• 📋 **Clinical Assessment** — SOAP, MMT, goniometry, special tests\n' +
+    '• 🧠 **Conditions** — MSK, neuro, cardiorespiratory, paediatrics\n' +
+    '• ⚡ **Electrotherapy** — TENS, ultrasound, IFT, laser\n' +
+    '• 📅 **Exam Timetable** — upload photo → personalised study plan\n' +
+    '• 📸 **Image Analysis** — X-rays, diagrams, anatomy pictures\n\n' +
+    'Type a question or tap 📎 to attach a file!',
+    'Gemini'
+  );
+  // Quick chips
+  setTimeout(function(){
+    var c=document.getElementById('messages'); if(!c) return;
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;flex-wrap:wrap;gap:8px;padding:4px 0 8px;margin-left:42px';
+    var chips=[
+      {txt:'🦴 Spine anatomy', q:'Explain spinal anatomy for physiotherapy'},
+      {txt:'💪 MMT grading', q:'Explain manual muscle testing grading 0-5'},
+      {txt:'🧠 Stroke rehab', q:'What is the physiotherapy approach to stroke rehabilitation?'},
+      {txt:'📋 SOAP notes', q:'Explain the SOAP assessment format for physiotherapy'},
+      {txt:'⚡ TENS therapy', q:'Explain TENS electrotherapy — types, indications, parameters'},
+      {txt:'📅 Timetable', q:'timetable', special: true}
+    ];
+    chips.forEach(function(chip){
+      var btn=document.createElement('button');
+      btn.textContent=chip.txt; btn.className='chip';
+      btn.onclick=function(){
+        if(chip.special){ openTimetableMode(); row.remove(); return; }
+        document.getElementById('aiInp').value=chip.q;
+        row.remove(); doSend();
+      };
+      row.appendChild(btn);
+    });
+    c.appendChild(row); c.scrollTop=c.scrollHeight;
+  }, 300);
+}
+// ── Auth check & init ──────────────────────────────────────────
+if (typeof auth !== 'undefined') {
+  auth.onAuthStateChanged(function(user) {
+    if (!user) { window.location.href='../index.html'; return; }
+    showWelcome();
+  });
+} else {
+  showWelcome();
+}
+</script>
+<script>
+// Bug 5 fix: save & restore studyai page savepoint (chat scroll + last query)
+(function(){
+  var _sp_key = 'studyai';
+  var _sp_timer = null;
+  function _saveSP(){
+    if(typeof OfflineDB === 'undefined') return;
+    var msgsEl = document.getElementById('messages');
+    var scrollTop = msgsEl ? msgsEl.scrollTop : 0;
+    var lastInp = document.getElementById('aiInp');
+    var lastQuery = lastInp ? lastInp.value : '';
+    OfflineDB.saveSavepoint(_sp_key, { scrollTop: scrollTop, lastQuery: lastQuery, savedAt: Date.now() });
+  }
+  function _debounceSave(){ clearTimeout(_sp_timer); _sp_timer = setTimeout(_saveSP, 800); }
+  function _restoreSP(){
+    if(typeof OfflineDB === 'undefined') return;
+    OfflineDB.getSavepoint(_sp_key).then(function(sp){
+      if(!sp || !sp.data) return;
+      if(sp.data.scrollTop){
+        setTimeout(function(){
+          var msgsEl = document.getElementById('messages');
+          if(msgsEl) msgsEl.scrollTop = sp.data.scrollTop;
+        }, 700);
+      }
+    });
+  }
+  var msgsEl = document.getElementById('messages');
+  if(msgsEl) msgsEl.addEventListener('scroll', _debounceSave, { passive: true });
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveSP(); });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _restoreSP);
+  else setTimeout(_restoreSP, 500);
+})();
+</script>
+</body>
+</html>

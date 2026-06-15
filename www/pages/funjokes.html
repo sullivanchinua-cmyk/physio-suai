@@ -1,0 +1,2887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <!-- Capacitor runtime (injected by build) -->
+    <script src="../capacitor.js"></script>
+    <!-- Physio SUAI Capacitor modules -->
+    <script src="../js/capacitor-bridge.js"></script>
+    <script src="../js/dexie-offline.js"></script>
+    <script src="../js/alarm-manager.js"></script>
+    <script src="../js/background-audio.js"></script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+  <title>Fun Jokes – Physio SUAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- No aws4fetch needed: upload uses built-in crypto.subtle -->
+  <script src="../js/hybrid-config.js"></script>
+  <script src="../js/file-preview.js"></script>
+  <script src="../js/image-viewer.js"></script>
+  <script src="../js/gemini-chat.js"></script>
+  <script src="../js/attach-menu.js"></script>
+  <script src="../js/chat-theme.js"></script>
+  <style>
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;margin:0;padding:0;overflow:hidden;background:#0b141a;color:#e9edef}
+    body{display:flex;flex-direction:column;width:100%;max-width:100vw;overflow-x:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    /* ── Messages ── */
+    #msgs{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 6px 4px;-webkit-overflow-scrolling:touch;min-height:0;position:relative;background-size:cover;background-position:center;background-repeat:no-repeat;background-attachment:local}
+    #msgs.has-wallpaper{background-attachment:scroll;background-size:100% 100vh}
+    #msgs::-webkit-scrollbar{display:none}
+    /* ── Bubble layout ── */
+    .bwrap{display:flex;padding:2px 6px 2px 4px;align-items:flex-end;gap:5px;width:100%;max-width:100%}
+    .bwrap.mine{flex-direction:row-reverse}
+    .bwrap.theirs{flex-direction:row}
+    .avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;align-self:flex-end}
+    .bcont{max-width:82%;min-width:0;display:flex;flex-direction:column}
+    .bwrap.mine .bcont{align-items:flex-end}
+    .bwrap.theirs .bcont{align-items:flex-start}
+    /* WhatsApp bubble: wider, pointed corner, with tail */
+    .bubble{padding:7px 10px 20px;font-size:14.5px;line-height:1.45;word-break:break-word;word-wrap:break-word;overflow-wrap:break-word;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.35);max-width:100%;display:inline-block;min-width:88px}
+    /* Mine = pink/purple, tail points RIGHT (top-right sharp) */
+    .bubble.mine{background:linear-gradient(135deg,#9333ea 0%,#ec4899 100%);border-radius:7.5px 0 7.5px 7.5px;color:#fff}
+    .bubble.mine::before{content:'';position:absolute;top:0;right:-8px;width:0;height:0;border-style:solid;border-width:0 0 8px 8px;border-color:transparent transparent transparent #9333ea}
+    /* Theirs = dark, tail points LEFT (top-left sharp) */
+    .bubble.theirs{background:#1f2c34;border-radius:0 7.5px 7.5px 7.5px;color:#e9edef}
+    .bubble.theirs::before{content:'';position:absolute;top:0;left:-8px;width:0;height:0;border-style:solid;border-width:0 8px 8px 0;border-color:transparent #1f2c34 transparent transparent}
+    .bubble.bot{background:#2a1f0e;border:1px solid #92400e55;border-radius:0 7.5px 7.5px 7.5px}
+    .bubble.bot::before{border-color:transparent #2a1f0e transparent transparent}
+    .bmeta{position:absolute;bottom:4px;right:8px;display:flex;align-items:center;gap:3px;white-space:nowrap}
+    .btime{font-size:10.5px;color:rgba(255,255,255,.6)}
+    /* Double tick for read receipts */
+    .btick{width:16px;height:16px;fill:#fff;opacity:.75}
+    .btick.read{fill:#53bdeb;opacity:1}
+    .bsender{font-size:12px;color:#25d366;font-weight:600;margin:0 0 2px}
+    .bubble img{max-width:220px;max-height:220px;border-radius:8px;display:block;margin-top:4px;cursor:pointer}
+    .bubble audio{width:220px;max-width:100%;height:38px;margin-top:4px;border-radius:20px;display:block}
+    /* WhatsApp-style reply strip */
+    .reply-strip{display:flex;align-items:center;background:rgba(0,0,0,.22);border-left:4px solid #25d366;border-radius:0 8px 8px 0;padding:6px 8px;margin-bottom:8px;cursor:pointer;overflow:hidden;gap:6px}
+    .rs-name{font-size:11.5px;color:#25d366;font-weight:700;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rs-text{font-size:12px;color:rgba(255,255,255,.65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+    /* ── Attach-menu black bubbles ── */
+    .bubble.attach-blk{background:#111827!important;border-radius:12px!important;color:#fff!important}
+    .bubble.attach-blk::before{display:none!important}
+    .bubble.attach-blk.mine{background:#111827!important}
+    .bubble.attach-poll{border-left:3px solid #ec4899!important;padding-left:12px!important}
+    @keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes _editSlideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .bwrap{animation:msgIn .2s ease both}
+    @keyframes ctxIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+    .ctx-menu{animation:ctxIn .14s ease}
+    /* ── File strip ── */
+    #fileStrip{display:none;background:#1f2c34;border-top:1px solid #2a3942;padding:8px 12px;flex-shrink:0}
+    /* ── Recording bar ── */
+    #recBar{display:none;background:#1f2c34;border-top:1px solid #2a3942;padding:10px 14px;flex-shrink:0;align-items:center;gap:10px}
+    .rec-dot{width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0;animation:pulse 1s infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.2)}}
+    /* ── Input bar ── */
+    #inputBar{flex-shrink:0;background:#1f2c34;border-top:1px solid #2a3942;padding:6px 8px}
+    .inp-row{display:flex;align-items:flex-end;gap:6px;width:100%;max-width:100%}
+    .inp-pill{flex:1;min-width:0;display:flex;align-items:center;background:#2a3942;border-radius:26px;padding:3px 8px 3px 14px;gap:4px}
+    .p-btn{width:36px;height:36px;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#8696a0;flex-shrink:0;border-radius:50%;padding:0}
+    .p-btn:active{background:rgba(255,255,255,.1)}
+    .p-btn svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    #msgInp{flex:1;min-width:0;width:1px;background:none;border:none;outline:none;color:#e9edef;font-size:15px;padding:8px 2px;font-family:inherit;line-height:1.4}
+    #msgInp::placeholder{color:#8696a0}
+    #micSendBtn{width:52px;height:52px;min-width:52px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(236,72,153,.4);transition:background .2s,transform .1s}
+    #micSendBtn:active{transform:scale(.92)}
+    #micSendBtn svg{width:24px;height:24px;fill:white}
+    /* ── Emoji picker ── */
+    #emojiPick{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;background:#1f2c34;border-top:1px solid #2a3942;padding:12px 8px 28px;max-height:220px;overflow-y:auto}
+    .eg{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+    .eg span{font-size:26px;cursor:pointer;text-align:center;padding:5px;border-radius:8px;display:block;user-select:none}
+    .eg span:active{background:#2a3942;transform:scale(1.2)}
+    #emojiPick button{width:100%;background:none;border:none;color:#8696a0;font-size:13px;padding:10px 0 2px;cursor:pointer}
+    /* ── Loading ── */
+    #loadingOverlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.65);align-items:center;justify-content:center}
+    #loadingOverlay:not(.hidden){display:flex}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes waDotBounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-5px);opacity:1;background:#a855f7}}
+  .waDot{animation:waDotBounce 1.3s ease-in-out infinite}
+  @keyframes waBarPulse{0%,100%{height:4px;opacity:.4}50%{height:18px;opacity:1}}
+  .waBar{width:3px;border-radius:2px;background:#a855f7;display:inline-block;animation:waBarPulse 1s ease-in-out infinite}
+  </style>
+</head>
+<body>
+<!-- ── NAV ─────────────────────────────────────────────────────────── -->
+<nav style="background:#1f2c34;border-bottom:1px solid #2a3942;padding:10px 10px;flex-shrink:0;display:flex;align-items:center;gap:10px;min-height:56px">
+  <button onclick="location.href='../home.html'" style="width:42px;height:42px;background:linear-gradient(135deg,#9333ea,#ec4899);border:none;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(147,51,234,.4)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+  </button>
+  <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">😂</div>
+  <div style="flex:1;min-width:0">
+    <p style="font-weight:700;font-size:15px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e9edef">Fun Jokes Chat</p>
+    <p style="font-size:12px;color:#8696a0;margin:0" id="onlineStatus">Anonymous • Everyone</p>
+  </div>
+  <span id="onlineCount" style="font-size:12px;color:#25d366;font-weight:600;flex-shrink:0"></span>
+  <div style="position:relative;flex-shrink:0">
+    <button onclick="document.getElementById('fjMenu').style.display=document.getElementById('fjMenu').style.display==='none'?'block':'none'" style="width:36px;height:36px;background:none;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+    </button>
+    <div id="fjMenu" style="display:none;position:absolute;right:4px;top:46px;background:#1f2937;border:1px solid #374151;border-radius:14px;padding:6px;min-width:200px;z-index:50;box-shadow:0 8px 30px #000b">
+      <button onclick="document.getElementById('fjMenu').style.display='none';showFjMedia()" style="display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;cursor:pointer;padding:12px 14px;color:#fff;font-size:15px;border-radius:10px;-webkit-tap-highlight-color:transparent">🖼️ Media, Links & Docs</button>
+      <button onclick="document.getElementById('fjMenu').style.display='none';__ct&&__ct.open()" style="display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;cursor:pointer;padding:12px 14px;color:#fff;font-size:15px;border-radius:10px;-webkit-tap-highlight-color:transparent">🎨 Chat theme</button>
+      <button onclick="document.getElementById('fjMenu').style.display='none';openAnonCards()" style="display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;cursor:pointer;padding:12px 14px;color:#fff;font-size:15px;border-radius:10px;-webkit-tap-highlight-color:transparent">🎭 Anonymous Cards</button>
+    </div>
+  </div>
+</nav>
+<!-- ── PINNED BANNER ─────────────────────────────────────────────── -->
+<div id="jokesPinnedBanner" onclick="scrollToJokesPin()" style="display:none;margin:6px 10px 2px;border-radius:14px;background:linear-gradient(135deg,rgba(147,51,234,.18),rgba(236,72,153,.18));border:1px solid rgba(236,72,153,.35);padding:9px 14px;flex-shrink:0;cursor:pointer;box-shadow:0 2px 12px rgba(147,51,234,.2)">
+  <div style="display:flex;align-items:center;gap:8px">
+    <span>📌</span>
+    <div>
+      <p style="font-size:11px;color:#60a5fa;margin:0;font-weight:700">Pinned Message</p>
+      <p id="jokesPinnedText" style="font-size:13px;margin:0;color:#e9edef;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px"></p>
+    </div>
+  </div>
+</div>
+<!-- ── MESSAGES ───────────────────────────────────────────────────── -->
+<div id="msgs"></div>
+<!-- ── SCROLL TO BOTTOM BUTTON ────────────────────────────────────── -->
+<button id="fjScrollBtn" onclick="fjScrollToBottom()" style="position:fixed;right:18px;bottom:88px;z-index:600;width:48px;height:48px;border-radius:50%;background:#1f2937;border:1.5px solid #4b5563;cursor:pointer;box-shadow:0 3px 16px rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent">
+  <span id="fjUnreadBadge" style="position:absolute;top:-8px;right:-4px;background:linear-gradient(135deg,#9333ea,#ec4899);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;padding:0 5px;display:none;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4)"></span>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e9edef" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+</button>
+<!-- ── FILE PREVIEW STRIP ─────────────────────────────────────────── -->
+<!-- REPLY BAR -->
+<!-- TYPING / RECORDING INDICATOR — WhatsApp style bubble -->
+<div id="fjTypingBar" style="display:none;padding:4px 12px 2px;flex-shrink:0">
+  <div id="fjTypingBubble" style="display:inline-flex;align-items:center;gap:8px;background:#1f2c34;border-radius:18px 18px 18px 4px;padding:8px 14px;max-width:80%;box-shadow:0 1px 4px rgba(0,0,0,.3)">
+    <div id="fjTypingAvatars" style="display:flex;gap:-4px;align-items:center"></div>
+    <div id="fjTypingDots" style="display:flex;gap:4px;align-items:center">
+      <span class="waDot" style="width:8px;height:8px;border-radius:50%;background:#8696a0;display:inline-block"></span>
+      <span class="waDot" style="width:8px;height:8px;border-radius:50%;background:#8696a0;display:inline-block;animation-delay:.2s"></span>
+      <span class="waDot" style="width:8px;height:8px;border-radius:50%;background:#8696a0;display:inline-block;animation-delay:.4s"></span>
+    </div>
+    <div id="fjRecBars" style="display:none;gap:3px;align-items:flex-end;height:20px">
+      <span class="waBar"></span><span class="waBar" style="animation-delay:.1s"></span>
+      <span class="waBar" style="animation-delay:.2s"></span><span class="waBar" style="animation-delay:.3s"></span>
+      <span class="waBar" style="animation-delay:.4s"></span>
+    </div>
+    <span id="fjTypingText" style="font-size:12px;color:#8696a0;font-style:italic"></span>
+  </div>
+</div>
+<div id="fjReplyBar" style="display:none;background:#111b21;border-top:1px solid #2a3942;padding:6px 12px;flex-shrink:0">
+  <div style="display:flex;align-items:center;gap:10px;background:#1f2c34;border-radius:10px;border-left:4px solid #25d366;padding:8px 10px;min-height:44px">
+    <div style="flex:1;min-width:0">
+      <p style="font-size:11.5px;color:#25d366;font-weight:700;margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="fjReplyToName">Name</p>
+      <p id="fjReplyToText" style="font-size:12px;color:#8696a0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+    </div>
+    <button onclick="fjClearReply()" style="background:none;border:none;cursor:pointer;color:#8696a0;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;padding:0">✕</button>
+  </div>
+</div>
+<div id="fjImgStrip" style="display:none;background:#0d0f1a;border-top:1px solid #2a3942;padding:10px 12px;align-items:center;gap:10px">
+  <img id="fjImgThumb" style="width:60px;height:60px;border-radius:8px;object-fit:cover;flex-shrink:0" src="" alt="">
+  <div style="flex:1;min-width:0">
+    <p id="fjImgName" style="font-size:13px;color:#e9edef;margin:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></p>
+    <p id="fjImgSize" style="font-size:11px;color:#8696a0;margin:2px 0 0"></p>
+  </div>
+  <button onclick="clearPending()" style="background:none;border:none;cursor:pointer;color:#f87171;font-size:22px;flex-shrink:0;line-height:1">✕</button>
+</div>
+<div id="fileStrip">
+  <div style="display:flex;align-items:center;gap:10px;background:#1a2030;border-radius:14px;padding:10px 12px;border:1px solid #2d3748">
+    <div id="fjFsIcoWrap" style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px"><span id="fsIcon">📎</span></div>
+    <div style="flex:1;min-width:0">
+      <div id="fjFsType" style="font-size:11px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px"></div>
+      <span id="fsName" style="font-size:13px;color:#e9edef;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block"></span>
+    </div>
+    <button onclick="clearPending()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;color:#9ca3af;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+  </div>
+</div>
+<!-- ── RECORDING BAR ───────────────────────────────────────────────── -->
+<div id="recBar">
+  <div class="rec-dot"></div>
+  <span id="recTimer" style="font-size:14px;color:#ef4444;font-weight:700;min-width:38px">0:00</span>
+  <span style="flex:1;font-size:13px;color:#8696a0">Recording… Release to send</span>
+  <button onclick="cancelVoice()" style="background:none;border:none;cursor:pointer;color:#8696a0;font-size:13px;padding:4px 8px;border-radius:8px">✕ Cancel</button>
+</div>
+<!-- ── INPUT BAR ───────────────────────────────────────────────────── -->
+<div id="inputBar">
+  <div class="inp-row">
+    <div class="inp-pill">
+      <!-- Emoji button — hold 800ms for quick emoji -->
+      <button class="p-btn" id="emojiBtnJ" title="Emoji / GIF / Sticker"
+        ontouchstart="WaEmojiPanel.touchStart(event)"
+        ontouchend="WaEmojiPanel.touchEnd(true)"
+        ontouchcancel="WaEmojiPanel.touchCancel()"
+        onclick="WaEmojiPanel.toggle('emoji')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+      </button>
+      <!-- Textarea: Enter=newline, send via button -->
+      <textarea id="msgInp" rows="1" placeholder="Message" autocomplete="off"
+        onkeydown="if(event.key==='Escape') WaEmojiPanel.close();"
+        oninput="onType();_fjResizeTA(this);"
+        style="flex:1;min-width:0;background:none;border:none;outline:none;color:#e9edef;font-size:15px;padding:8px 2px;font-family:inherit;resize:none;overflow:hidden;line-height:1.4;max-height:100px;width:100%;box-sizing:border-box"></textarea>
+      <!-- Attach / Clip -->
+      <button class="p-btn" onclick="showAttachMenu(onAttached)" title="Attach">
+        <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <!-- Camera -->
+      <label for="_camInpFj" class="p-btn" title="Camera" style="cursor:pointer;display:flex;align-items:center;justify-content:center"
+        ontouchend="event.preventDefault();_openFjCamera()"
+        onclick="_openFjCamera()">
+        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </label>
+      <input id="_camInpFj" type="file" accept="image/*" capture="environment" style="position:fixed;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none">
+    </div>
+    <!-- Pink/purple send/mic — tap=send/voice, hold=view-once -->
+    <div style="position:relative;flex-shrink:0">
+      <button id="micSendBtn"
+        ontouchstart="_fjSbStart(event)"
+        ontouchend="_fjSbEnd(event)"
+        ontouchcancel="_fjSbCancel()"
+        onmousedown="_fjSbStart(event)"
+        onmouseup="_fjSbEnd(event)"
+        onmouseleave="_fjSbCancel()">
+        <svg id="micSVG" viewBox="0 0 24 24" width="23" height="23" fill="none"><rect x="9" y="1" width="6" height="12" rx="3" fill="white"/><path d="M5 11c0 3.866 3.134 7 7 7s7-3.134 7-7" stroke="white" stroke-width="2.2" stroke-linecap="round" fill="none"/><line x1="12" y1="18" x2="12" y2="22" stroke="white" stroke-width="2.2" stroke-linecap="round"/><line x1="8.5" y1="22" x2="15.5" y2="22" stroke="white" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <svg id="sendSVG" style="display:none" viewBox="0 0 24 24" width="22" height="22"><path d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.455.547-.679.045L12 14l6-8-8 6-8.054-2.685z" fill="white"/></svg>
+        <!-- View-once mode: show a stylish "1" badge on the send icon -->
+        <svg id="fjVoOnceSVG" style="display:none" viewBox="0 0 24 24" width="22" height="22"><path d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.455.547-.679.045L12 14l6-8-8 6-8.054-2.685z" fill="white"/></svg>
+      </button>
+      <div id="fjVoBadge" style="display:none;position:absolute;top:-6px;right:-4px;width:20px;height:20px;background:linear-gradient(135deg,#ec4899,#8b5cf6);border-radius:50%;text-align:center;line-height:20px;font-size:11px;color:white;font-weight:900;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.4);font-family:Arial,sans-serif">1</div>
+    </div>
+  </div>
+</div>
+<!-- EMOJI/GIF/STICKER/AVATAR panel handled by WaEmojiPanel -->
+
+<!-- Loading overlay -->
+<div id="loadingOverlay" class="hidden"><div style="text-align:center"><div style="width:44px;height:44px;border:4px solid #ec4899;border-top:4px solid transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto"></div><p class="loading-text" style="color:#fff;margin-top:12px;font-size:14px">Loading…</p></div></div>
+<script src="../js/main.js"></script>
+<script src="../js/offline-cache.js"></script>
+<script src="../js/features.js"></script>
+<script>
+// ── Rich image/video preview editor (identical to classroom chat) ──────────────
+// Overrides the basic file-preview.js version with full draw/crop/text/emoji tools
+function showFilePreview(file, onSend) {
+  var ex = document.getElementById('filePreviewOv'); if(ex) ex.remove();
+  var _viewOnce = false, _rot = 0, _drawMode = false;
+  var _drawCanvas = null, _drawCtx = null, _drawColor = '#ec4899', _drawSize = 5;
+  var _overlays = [];  // {el, isEmoji}
+  var objUrl = URL.createObjectURL(file);
+  var isImg = file.type.startsWith('image/');
+  var isVid = file.type.startsWith('video/');
+  var vid;
+
+  /* ── Root overlay ── */
+  var ov = document.createElement('div');
+  ov.id = 'filePreviewOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99990;background:#000;display:flex;flex-direction:column;font-family:-apple-system,sans-serif;overscroll-behavior:none';
+
+  /* ── SVG icon helper ── */
+  function _svg(path,vb){return '<svg width="22" height="22" viewBox="'+(vb||'0 0 24 24')+'" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg>';}
+  var IC={
+    close: _svg('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+    dl:    _svg('<path d="M12 3v13"/><polyline points="7 11 12 16 17 11"/><line x1="3" y1="21" x2="21" y2="21"/>'),
+    rot:   _svg('<path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-5"/>'),
+    crop:  _svg('<polyline points="6.5 3 6.5 17.5 21 17.5"/><polyline points="3 6.5 6.5 6.5"/><rect x="10" y="6.5" width="7.5" height="7.5" rx="1"/>'),
+    txt:   '<svg width="22" height="22" viewBox="0 0 24 24"><text x="3" y="18" font-size="17" font-weight="900" font-family="Arial" fill="white">T</text></svg>',
+    emoji: _svg('<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><circle cx="9" cy="9.5" r="1" fill="white" stroke="none"/><circle cx="15" cy="9.5" r="1" fill="white" stroke="none"/>'),
+    draw:  _svg('<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>'),
+    spk:   _svg('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'),
+    mute:  _svg('<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>'),
+    hd:    '<svg width="22" height="22" viewBox="0 0 32 22"><text x="1" y="17" font-size="16" font-weight="900" font-family="Arial" fill="white">HD</text></svg>'
+  };
+
+  function _mkBtn(id, ico, title) {
+    var b = document.createElement('button');
+    b.id = id; b.title = title;
+    b.style.cssText = 'width:44px;height:44px;background:rgba(255,255,255,.12);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background .15s,transform .1s';
+    b.innerHTML = ico;
+    b.addEventListener('touchstart',function(){this.style.transform='scale(.9)';},{passive:true});
+    b.addEventListener('touchend',function(){this.style.transform='';},{passive:true});
+    return b;
+  }
+
+  /* ── TOP TOOLBAR ── */
+  var toolbar = document.createElement('div');
+  toolbar.style.cssText = 'flex-shrink:0;display:flex;align-items:center;padding:10px 8px;gap:6px;background:rgba(0,0,0,.75);backdrop-filter:blur(12px);';
+  var closeBtn = _mkBtn('_fp_close', IC.close, 'Cancel');
+  closeBtn.style.background = 'rgba(255,255,255,.08)';
+  toolbar.appendChild(closeBtn);
+  var sp0 = document.createElement('div'); sp0.style.flex='1'; toolbar.appendChild(sp0);
+  toolbar.appendChild(_mkBtn('_fp_dl', IC.dl, 'Save'));
+  if(isVid){ toolbar.appendChild(_mkBtn('_fp_mute', IC.spk, 'Mute')); }
+  if(isImg){ toolbar.appendChild(_mkBtn('_fp_rot',  IC.rot,  'Rotate')); }
+  if(isImg){ toolbar.appendChild(_mkBtn('_fp_crop', IC.crop, 'Crop')); }
+  toolbar.appendChild(_mkBtn('_fp_txt',   IC.txt,   'Add text'));
+  toolbar.appendChild(_mkBtn('_fp_emoji', IC.emoji, 'Add emoji'));
+  toolbar.appendChild(_mkBtn('_fp_draw',  IC.draw,  'Draw'));
+  ov.appendChild(toolbar);
+
+  /* ── PREVIEW AREA ── */
+  var preview = document.createElement('div');
+  preview.id = '_fp_preview';
+  preview.style.cssText = 'flex:1;display:flex;align-items:center;justify-content:center;background:#111;position:relative;overflow:hidden';
+  ov.appendChild(preview);
+
+  /* ── Overlay container (sits on top of image, same bounds) ── */
+  var ovLayer = document.createElement('div');
+  ovLayer.id = '_fp_ovLayer';
+  ovLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:10';
+  preview.appendChild(ovLayer);
+
+  /* ── Image / Video ── */
+  var imgEl;
+  if(isImg){
+    imgEl = document.createElement('img');
+    imgEl.id = '_fp_img';
+    imgEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;display:block;transition:transform .3s;pointer-events:none';
+    imgEl.src = objUrl;
+    preview.insertBefore(imgEl, ovLayer);
+    imgEl.onload = function(){
+      // Sync ovLayer to exact rendered image bounds
+      var r = imgEl.getBoundingClientRect(), pr = preview.getBoundingClientRect();
+      ovLayer.style.left   = (r.left  - pr.left)  + 'px';
+      ovLayer.style.top    = (r.top   - pr.top)   + 'px';
+      ovLayer.style.width  = r.width  + 'px';
+      ovLayer.style.height = r.height + 'px';
+    };
+    window.addEventListener('resize', function(){ if(!imgEl) return;
+      var r=imgEl.getBoundingClientRect(),pr=preview.getBoundingClientRect();
+      ovLayer.style.left=(r.left-pr.left)+'px';ovLayer.style.top=(r.top-pr.top)+'px';
+      ovLayer.style.width=r.width+'px';ovLayer.style.height=r.height+'px';
+    });
+  } else if(isVid){
+    vid = document.createElement('video');
+    vid.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;display:block';
+    vid.muted=false; vid.src=objUrl; vid.playsInline=true;
+    var playOvl = document.createElement('div');
+    playOvl.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5;cursor:pointer';
+    playOvl.innerHTML='<div style="width:60px;height:60px;border-radius:50%;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)"><svg width="24" height="24" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>';
+    playOvl.onclick=function(){vid.paused?vid.play():vid.pause();};
+    vid.onplay=function(){playOvl.style.display='none';};
+    vid.onpause=function(){playOvl.style.display='flex';};
+    preview.insertBefore(vid, ovLayer);
+    preview.insertBefore(playOvl, ovLayer);
+  } else {
+    var docBox = document.createElement('div');
+    docBox.style.cssText='padding:30px 20px;text-align:center;color:#fff';
+    docBox.innerHTML='<div style="font-size:48px">📄</div><div style="font-size:14px;margin-top:8px;color:#9ca3af">'+file.name+'</div>';
+    preview.insertBefore(docBox, ovLayer);
+  }
+
+  /* ── FILMSTRIP for video ── */
+  if(isVid){
+    var strip = document.createElement('div');
+    strip.id = '_fp_strip';
+    strip.style.cssText='flex-shrink:0;display:flex;gap:3px;padding:6px 8px;background:#000;overflow-x:auto;-webkit-overflow-scrolling:touch;min-height:52px;align-items:center';
+    strip.innerHTML='<span style="color:#4b5563;font-size:12px;padding:0 8px">Loading frames…</span>';
+    ov.appendChild(strip);
+    if(vid) vid.addEventListener('loadedmetadata',function(){
+      var dur=vid.duration; if(!dur||dur>300){strip.innerHTML='';return;}
+      strip.innerHTML='';
+      var count=Math.min(Math.round(dur),9);
+      var cvs2=document.createElement('canvas');cvs2.width=60;cvs2.height=40;
+      var ctx2=cvs2.getContext('2d');
+      (function _nf(i){if(i>=count)return;
+        var tv=document.createElement('video');tv.src=objUrl;tv.muted=true;
+        tv.onloadedmetadata=function(){tv.currentTime=(i/count)*dur;};
+        tv.onseeked=function(){try{ctx2.drawImage(tv,0,0,60,40);
+          var thumb=document.createElement('div');
+          thumb.style.cssText='width:54px;height:40px;flex-shrink:0;border-radius:5px;overflow:hidden;cursor:pointer;border:2px solid transparent';
+          thumb.innerHTML='<img src="'+cvs2.toDataURL()+'" style="width:100%;height:100%;object-fit:cover">';
+          thumb.onclick=function(){if(vid)vid.currentTime=(i/count)*dur;};
+          strip.appendChild(thumb);
+        }catch(e){}
+        _nf(i+1);};
+        tv.load();
+      })(0);
+    });
+  }
+
+  /* ── CAPTION + SEND BAR ── */
+  var capBar = document.createElement('div');
+  capBar.id = '_fp_botBar';
+  capBar.style.cssText='flex-shrink:0;display:flex;flex-direction:column;background:rgba(0,0,0,.75);backdrop-filter:blur(12px)';
+  var capRow = document.createElement('div');
+  capRow.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 12px 14px';
+  var voBtn = document.createElement('button');
+  voBtn.id='_fp_vo';
+  voBtn.style.cssText='width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.1);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent';
+  voBtn.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  voBtn.title='View once';
+  var capInput = document.createElement('input');
+  capInput.placeholder='Add a caption…';
+  capInput.style.cssText='flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:10px 16px;color:#fff;font-size:14px;outline:none;caret-color:#ec4899;font-family:inherit';
+  var sendBtn = document.createElement('button');
+  sendBtn.style.cssText='width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;box-shadow:0 4px 16px rgba(147,51,234,.4)';
+  sendBtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+  capRow.appendChild(voBtn); capRow.appendChild(capInput); capRow.appendChild(sendBtn);
+  capBar.appendChild(capRow);
+  ov.appendChild(capBar);
+
+  document.body.appendChild(ov);
+
+  /* ── BUTTON ACTIONS ── */
+  function _closeAll(){
+    ['_fp_drawBar','_fp_txtPanel','_fp_emoPanel','_fp_cropOv'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
+  }
+  closeBtn.onclick = function(){_closeAll();URL.revokeObjectURL(objUrl);ov.remove();};
+
+  document.getElementById('_fp_dl').onclick=function(){
+    var a=document.createElement('a');a.href=objUrl;a.download=file.name||'file';document.body.appendChild(a);a.click();setTimeout(function(){a.remove();},500);
+  };
+
+  /* Mute (video) */
+  if(isVid){
+    var _muted=false;
+    document.getElementById('_fp_mute').onclick=function(){
+      _muted=!_muted; if(vid)vid.muted=_muted;
+      this.innerHTML=_muted?IC.mute:IC.spk;
+      this.style.background=_muted?'linear-gradient(135deg,#9333ea,#ec4899)':'rgba(255,255,255,.12)';
+    };
+  }
+
+  /* Rotate (image) */
+  if(isImg){
+    document.getElementById('_fp_rot').onclick=function(){
+      _rot=(_rot+90)%360;
+      if(imgEl) imgEl.style.transform='rotate('+_rot+'deg)';
+    };
+  }
+
+  /* ── CROP (image) — instant interactive ── */
+  if(isImg){
+    var _cropActive=false;
+    document.getElementById('_fp_crop').onclick=function(){
+      if(_cropActive){ _applyCrop(); return; }
+      _cropActive=true;
+      document.getElementById('_fp_crop').style.background='linear-gradient(135deg,#9333ea,#ec4899)';
+      var imgR=imgEl.getBoundingClientRect(), pr=preview.getBoundingClientRect();
+      // Crop frame (positioned relative to preview)
+      var cOv=document.createElement('div');cOv.id='_fp_cropOv';
+      cOv.style.cssText='position:absolute;left:'+(imgR.left-pr.left)+'px;top:'+(imgR.top-pr.top)+'px;width:'+imgR.width+'px;height:'+imgR.height+'px;z-index:30;touch-action:none';
+      // Dark masks
+      var masks=['top','bottom','left','right'];
+      masks.forEach(function(s){var m=document.createElement('div');m.setAttribute('data-m',s);m.style.cssText='position:absolute;background:rgba(0,0,0,.55);pointer-events:none;';cOv.appendChild(m);});
+      // Crop box
+      var box=document.createElement('div');box.id='_fp_cropBox';
+      box.style.cssText='position:absolute;border:2px solid #fff;box-sizing:border-box;z-index:2;cursor:move;touch-action:none';
+      // Start at 15% inset
+      var bx=imgR.width*0.15,by=imgR.height*0.15,bw=imgR.width*0.7,bh=imgR.height*0.7;
+      function _setBox(x,y,w,h){
+        bx=Math.max(0,Math.min(x,imgR.width-20));
+        by=Math.max(0,Math.min(y,imgR.height-20));
+        bw=Math.max(20,Math.min(w,imgR.width-bx));
+        bh=Math.max(20,Math.min(h,imgR.height-by));
+        box.style.left=bx+'px';box.style.top=by+'px';box.style.width=bw+'px';box.style.height=bh+'px';
+        // Update masks
+        var mTop=cOv.querySelector('[data-m=top]'),mBot=cOv.querySelector('[data-m=bottom]'),mLft=cOv.querySelector('[data-m=left]'),mRgt=cOv.querySelector('[data-m=right]');
+        if(mTop){mTop.style.cssText='position:absolute;background:rgba(0,0,0,.55);pointer-events:none;left:0;top:0;right:0;height:'+by+'px';}
+        if(mBot){mBot.style.cssText='position:absolute;background:rgba(0,0,0,.55);pointer-events:none;left:0;bottom:0;right:0;height:'+(imgR.height-by-bh)+'px';}
+        if(mLft){mLft.style.cssText='position:absolute;background:rgba(0,0,0,.55);pointer-events:none;left:0;top:'+by+'px;width:'+bx+'px;height:'+bh+'px';}
+        if(mRgt){mRgt.style.cssText='position:absolute;background:rgba(0,0,0,.55);pointer-events:none;right:0;top:'+by+'px;width:'+(imgR.width-bx-bw)+'px;height:'+bh+'px';}
+      }
+      _setBox(bx,by,bw,bh);
+      // Corner handles
+      [['nw','left:0;top:0;cursor:nw-resize'],['ne','right:0;top:0;cursor:ne-resize'],['sw','left:0;bottom:0;cursor:sw-resize'],['se','right:0;bottom:0;cursor:se-resize']].forEach(function(hd){
+        var h=document.createElement('div');h.setAttribute('data-h',hd[0]);
+        h.style.cssText='position:absolute;width:20px;height:20px;background:#ec4899;border-radius:50%;z-index:4;touch-action:none;'+hd[1];
+        var _s=false,_sx,_sy,_sbx,_sby,_sbw,_sbh;
+        function _hs(e){e.stopPropagation();e.preventDefault();_s=true;var t=e.touches?e.touches[0]:e;_sx=t.clientX;_sy=t.clientY;_sbx=bx;_sby=by;_sbw=bw;_sbh=bh;}
+        function _hm(e){e.stopPropagation();e.preventDefault();if(!_s)return;var t=e.touches?e.touches[0]:e;var dx=t.clientX-_sx,dy=t.clientY-_sy;
+          var corner=hd[0];
+          var nx=_sbx,ny=_sby,nw=_sbw,nh=_sbh;
+          if(corner==='nw'){nx=_sbx+dx;ny=_sby+dy;nw=_sbw-dx;nh=_sbh-dy;}
+          else if(corner==='ne'){nw=_sbw+dx;ny=_sby+dy;nh=_sbh-dy;}
+          else if(corner==='sw'){nx=_sbx+dx;nw=_sbw-dx;nh=_sbh+dy;}
+          else{nw=_sbw+dx;nh=_sbh+dy;}
+          _setBox(nx,ny,nw,nh);
+        }
+        function _he(){_s=false;}
+        h.addEventListener('touchstart',_hs,{passive:false});h.addEventListener('touchmove',_hm,{passive:false});h.addEventListener('touchend',_he);
+        h.addEventListener('mousedown',_hs);document.addEventListener('mousemove',function(e){if(_s)_hm(e);});document.addEventListener('mouseup',_he);
+        box.appendChild(h);
+      });
+      // Rule-of-thirds grid lines
+      var grid=document.createElement('div');
+      grid.style.cssText='position:absolute;inset:0;pointer-events:none;z-index:3';
+      grid.innerHTML='<div style="position:absolute;left:33.3%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.3)"></div><div style="position:absolute;left:66.6%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.3)"></div><div style="position:absolute;top:33.3%;left:0;right:0;height:1px;background:rgba(255,255,255,.3)"></div><div style="position:absolute;top:66.6%;left:0;right:0;height:1px;background:rgba(255,255,255,.3)"></div>';
+      box.appendChild(grid);
+      // Drag box to move
+      var _dm=false,_dx,_dy,_dbx,_dby;
+      box.addEventListener('touchstart',function(e){_dm=true;var t=e.touches[0];_dx=t.clientX;_dy=t.clientY;_dbx=bx;_dby=by;},{passive:false});
+      box.addEventListener('touchmove',function(e){e.preventDefault();if(!_dm)return;var t=e.touches[0];_setBox(_dbx+(t.clientX-_dx),_dby+(t.clientY-_dy),bw,bh);},{passive:false});
+      box.addEventListener('touchend',function(){_dm=false;},{passive:false});
+      // Apply button
+      var applyBtn=document.createElement('button');
+      applyBtn.textContent='✓ Crop';
+      applyBtn.style.cssText='position:absolute;bottom:-44px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#9333ea,#ec4899);border:none;border-radius:14px;color:#fff;font-weight:800;font-size:14px;padding:8px 24px;cursor:pointer;white-space:nowrap;z-index:5;-webkit-tap-highlight-color:transparent;box-shadow:0 4px 14px rgba(147,51,234,.5)';
+      function _doApply(e){if(e)e.preventDefault();_applyCrop();}
+      applyBtn.addEventListener('touchend',_doApply,{passive:false});
+      applyBtn.addEventListener('click',_doApply);
+      box.appendChild(applyBtn);
+      cOv.appendChild(box);
+      preview.appendChild(cOv);
+
+      function _applyCrop(){
+        _cropActive=false;
+        document.getElementById('_fp_crop').style.background='rgba(255,255,255,.12)';
+        var cropOvEl=document.getElementById('_fp_cropOv');if(cropOvEl)cropOvEl.remove();
+        // Apply to image using canvas
+        var scaleX=imgEl.naturalWidth/imgR.width, scaleY=imgEl.naturalHeight/imgR.height;
+        var cx=Math.round(bx*scaleX),cy=Math.round(by*scaleY),cw=Math.round(bw*scaleX),ch=Math.round(bh*scaleY);
+        cw=Math.min(cw,imgEl.naturalWidth-cx); ch=Math.min(ch,imgEl.naturalHeight-cy);
+        if(cw<4||ch<4) return;
+        var c3=document.createElement('canvas');c3.width=cw;c3.height=ch;
+        c3.getContext('2d').drawImage(imgEl,cx,cy,cw,ch,0,0,cw,ch);
+        imgEl.src=c3.toDataURL('image/jpeg',0.95);
+        imgEl.style.transform='';_rot=0;
+        // Reposition ovLayer after image reloads
+        imgEl.onload=function(){
+          var r=imgEl.getBoundingClientRect(),pr=preview.getBoundingClientRect();
+          ovLayer.style.left=(r.left-pr.left)+'px';ovLayer.style.top=(r.top-pr.top)+'px';
+          ovLayer.style.width=r.width+'px';ovLayer.style.height=r.height+'px';
+        };
+      }
+    };
+  }
+
+  /* ── Overlay drag+pinch helper ── */
+  function _makeDrag(el){
+    var _dr=false,_sx,_sy,_ox,_oy,_ps=null,_pBase;
+    function _pt(e){return e.touches?e.touches[0]:e;}
+    function _pinchDist(e){var dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;return Math.sqrt(dx*dx+dy*dy);}
+    el.addEventListener('touchstart',function(e){
+      e.stopPropagation();
+      if(e.touches.length===2){_ps=_pinchDist(e);_pBase=parseFloat(el.getAttribute('data-fs')||'40');return;}
+      _dr=true;var t=_pt(e),r=el.getBoundingClientRect(),cr=ovLayer.getBoundingClientRect();
+      _sx=t.clientX;_sy=t.clientY;_ox=r.left-cr.left;_oy=r.top-cr.top;
+    },{passive:false});
+    el.addEventListener('touchmove',function(e){
+      e.preventDefault();e.stopPropagation();
+      if(e.touches.length===2&&_ps!==null){
+        var nd=_pinchDist(e),scale=nd/_ps;
+        var nfs=Math.max(12,Math.min(120,_pBase*scale));
+        el.setAttribute('data-fs',nfs);
+        var sp=el.querySelector('span');if(sp)sp.style.fontSize=nfs+'px';
+        return;
+      }
+      if(!_dr)return;
+      var t=_pt(e),cr=ovLayer.getBoundingClientRect();
+      el.style.left=(_ox+t.clientX-_sx)+'px';el.style.top=(_oy+t.clientY-_sy)+'px';
+      el.style.transform='none';
+    },{passive:false});
+    el.addEventListener('touchend',function(e){if(e.touches.length<2)_ps=null;_dr=false;},{passive:false});
+  }
+
+  function _addOverlay(content,isEmoji,fs){
+    fs=fs||44;
+    var w=document.createElement('div');
+    w.setAttribute('data-overlay','1');w.setAttribute('data-fs',fs);w.setAttribute('data-emoji',isEmoji?'1':'0');
+    w.style.cssText='position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);z-index:20;pointer-events:all;touch-action:none;cursor:grab';
+    var sp=document.createElement('span');
+    sp.style.cssText='display:block;font-size:'+fs+'px;line-height:1.1;pointer-events:none;'+(isEmoji?'filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))':'text-shadow:0 2px 8px rgba(0,0,0,.9);font-weight:800;white-space:nowrap;');
+    sp.textContent=content;sp.style.color=w.getAttribute('data-col')||'#fff';
+    // Controls bar
+    var ctrl=document.createElement('div');
+    ctrl.style.cssText='position:absolute;top:-26px;left:0;display:flex;gap:4px;z-index:21;pointer-events:all';
+    [['−',function(){var s=parseFloat(w.getAttribute('data-fs')||fs);var ns=Math.max(10,s-4);w.setAttribute('data-fs',ns);sp.style.fontSize=ns+'px';},'#374151'],
+     ['+',function(){var s=parseFloat(w.getAttribute('data-fs')||fs);var ns=Math.min(130,s+4);w.setAttribute('data-fs',ns);sp.style.fontSize=ns+'px';},'#374151'],
+     ['✕',function(){w.remove();},'#ef4444']
+    ].forEach(function(it){
+      var b=document.createElement('button');b.textContent=it[0];
+      b.style.cssText='width:24px;height:24px;border-radius:50%;background:'+it[2]+';border:none;color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation';
+      b.addEventListener('touchend',function(e){e.stopPropagation();it[1]();},{passive:false});
+      b.addEventListener('click',it[1]);
+      ctrl.appendChild(b);
+    });
+    w.appendChild(ctrl);w.appendChild(sp);
+    ovLayer.style.pointerEvents='all';
+    ovLayer.appendChild(w);
+    setTimeout(function(){
+      var r=w.getBoundingClientRect(),cr=ovLayer.getBoundingClientRect();
+      w.style.transform='none';w.style.left=(r.left-cr.left)+'px';w.style.top=(r.top-cr.top)+'px';
+    },50);
+    _makeDrag(w);
+    return w;
+  }
+
+  /* ── EMOJI PANEL ── */
+  document.getElementById('_fp_emoji').onclick=function(e){
+    e.stopPropagation();
+    var ex=document.getElementById('_fp_emoPanel');if(ex){ex.remove();return;}
+    var panel=document.createElement('div');panel.id='_fp_emoPanel';
+    panel.style.cssText='position:fixed;bottom:72px;left:6px;right:6px;max-height:210px;background:#1a2030;border:1px solid #2d3748;border-radius:18px;padding:12px 10px;z-index:99999;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 -8px 32px rgba(0,0,0,.9)';
+    var cats={'Faces':['😂','😭','🥺','🔥','❤️','😍','🤣','😊','😎','😤','😈','🥰','😏','🤔','😅','🤦','🤷','💀','👀','🫡','😇','🤩','🫶','💪','👍'],
+               'Fun':['✨','💯','🎉','💫','🌟','⭐','🚀','🌈','💥','🎵','🏆','🎯','💎','🔔','💡']};
+    var tabs=document.createElement('div');tabs.style.cssText='display:flex;gap:5px;margin-bottom:8px';
+    var ea=document.createElement('div');ea.style.cssText='display:flex;flex-wrap:wrap;gap:2px';
+    function showC(name){ea.innerHTML='';cats[name].forEach(function(em){
+      var b=document.createElement('button');
+      b.style.cssText='font-size:30px;background:none;border:none;cursor:pointer;padding:5px;border-radius:8px;line-height:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation';
+      b.textContent=em;
+      function pick(ev){ev.preventDefault();ev.stopPropagation();_addOverlay(em,true);panel.remove();}
+      b.addEventListener('touchend',pick,{passive:false});b.addEventListener('click',pick);
+      ea.appendChild(b);
+    });}
+    Object.keys(cats).forEach(function(nm,i){
+      var t=document.createElement('button');
+      t.style.cssText='flex:1;padding:6px;border-radius:9px;border:none;cursor:pointer;font-size:11px;font-weight:700;touch-action:manipulation;'+(i===0?'background:#4f46e5;color:#fff':'background:rgba(255,255,255,.1);color:#aaa');
+      t.textContent=nm;
+      function sw(e){e.stopPropagation();tabs.querySelectorAll('button').forEach(function(x){x.style.background='rgba(255,255,255,.1)';x.style.color='#aaa';});t.style.background='#4f46e5';t.style.color='#fff';showC(nm);}
+      t.addEventListener('touchend',sw,{passive:false});t.addEventListener('click',sw);
+      tabs.appendChild(t);
+    });
+    showC('Faces');
+    panel.appendChild(tabs);panel.appendChild(ea);document.body.appendChild(panel);
+    setTimeout(function(){
+      function _out(ev){if(!panel.contains(ev.target)){panel.remove();document.removeEventListener('touchend',_out);document.removeEventListener('click',_out);}}
+      document.addEventListener('touchend',_out,{passive:true});document.addEventListener('click',_out);
+    },200);
+  };
+
+  /* ── TEXT TOOL ── */
+  var _txtActive=false;
+  document.getElementById('_fp_txt').onclick=function(e){
+    e.stopPropagation();
+    var ex=document.getElementById('_fp_txtPanel');if(ex){ex.remove();_txtActive=false;return;}
+    _txtActive=true;
+    var panel=document.createElement('div');panel.id='_fp_txtPanel';
+    panel.style.cssText='position:fixed;bottom:72px;left:0;right:0;z-index:99999;background:#111827;padding:12px 14px;border-top:1px solid #374151;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 28px rgba(0,0,0,.9)';
+    var colors=['#ffffff','#000000','#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#06b6d4'];
+    var selCol='#ffffff';var tinp;
+    var cRow=document.createElement('div');cRow.style.cssText='display:flex;gap:7px;align-items:center;overflow-x:auto;padding-bottom:2px';
+    colors.forEach(function(c){
+      var dot=document.createElement('button');
+      dot.style.cssText='width:30px;height:30px;min-width:30px;border-radius:50%;background:'+c+';border:2.5px solid '+(c==='#ffffff'?'#555':'transparent')+';cursor:pointer;flex-shrink:0;touch-action:manipulation';
+      function pc(ev){ev.stopPropagation();selCol=c;cRow.querySelectorAll('button').forEach(function(x){x.style.borderColor='transparent';});dot.style.borderColor='#fff';dot.style.transform='scale(1.2)';setTimeout(function(){dot.style.transform='';},150);if(tinp)tinp.style.color=c;}
+      dot.addEventListener('touchend',pc,{passive:false});dot.addEventListener('click',pc);
+      cRow.appendChild(dot);
+    });
+    tinp=document.createElement('input');tinp.placeholder='Type text…';
+    tinp.style.cssText='background:rgba(255,255,255,.1);border:1px solid #374151;border-radius:12px;padding:12px 14px;color:#fff;font-size:22px;font-weight:700;width:100%;box-sizing:border-box;outline:none;text-align:center;caret-color:#ec4899;font-family:inherit';
+    var bRow=document.createElement('div');bRow.style.cssText='display:flex;gap:10px';
+    var aBtn=document.createElement('button');
+    aBtn.style.cssText='flex:1;padding:13px;border-radius:14px;background:linear-gradient(135deg,#9333ea,#ec4899);border:none;color:#fff;font-weight:800;font-size:15px;cursor:pointer;touch-action:manipulation';
+    aBtn.textContent='Add to photo';
+    function doAdd(ev){if(ev)ev.stopPropagation();var t=tinp.value.trim();if(!t)return;var w=_addOverlay(t,false);var sp=w.querySelector('span');if(sp){sp.style.color=selCol;w.setAttribute('data-col',selCol);}panel.remove();_txtActive=false;}
+    aBtn.addEventListener('touchend',doAdd,{passive:false});aBtn.addEventListener('click',doAdd);
+    tinp.addEventListener('keydown',function(ke){if(ke.key==='Enter'){ke.preventDefault();doAdd();}});
+    var cBtn=document.createElement('button');cBtn.textContent='Cancel';
+    cBtn.style.cssText='padding:13px 18px;border-radius:14px;background:rgba(255,255,255,.1);border:none;color:#fff;font-weight:700;cursor:pointer;touch-action:manipulation';
+    cBtn.onclick=function(){panel.remove();_txtActive=false;};
+    bRow.appendChild(aBtn);bRow.appendChild(cBtn);
+    panel.appendChild(cRow);panel.appendChild(tinp);panel.appendChild(bRow);
+    document.body.appendChild(panel);
+    setTimeout(function(){tinp.focus();},200);
+  };
+
+  /* ── DRAW MODE ── */
+  document.getElementById('_fp_draw').onclick=function(e){
+    e.stopPropagation();
+    if(_drawMode){
+      _drawMode=false;this.style.background='rgba(255,255,255,.12)';
+      var db2=document.getElementById('_fp_drawBar');if(db2)db2.remove();
+      if(_drawCanvas)_drawCanvas.style.pointerEvents='none';
+      return;
+    }
+    _drawMode=true;this.style.background='linear-gradient(135deg,#9333ea,#ec4899)';
+    // FIX7: Canvas must be positioned EXACTLY over the image (ovLayer bounds), not the full preview.
+    // We create it lazily; position is synced after imgEl loads and on resize.
+    var _drawTool='pen'; // pen|line|rect|circle|triangle|arrow
+    var _snapImg=null;   // snapshot before shape preview
+    function _syncDrawCanvas(){
+      if(!imgEl||!_drawCanvas) return;
+      var r=imgEl.getBoundingClientRect(), pr2=preview.getBoundingClientRect();
+      _drawCanvas.style.position='absolute';
+      _drawCanvas.style.left=(r.left-pr2.left)+'px';
+      _drawCanvas.style.top=(r.top-pr2.top)+'px';
+      _drawCanvas.style.width=r.width+'px';
+      _drawCanvas.style.height=r.height+'px';
+      _drawCanvas.style.right=''; _drawCanvas.style.bottom='';
+      // Only reset pixel dimensions if they changed (avoids erasing strokes on minor jitter)
+      if(_drawCanvas.width!==Math.round(r.width)||_drawCanvas.height!==Math.round(r.height)){
+        var snap=_drawCtx?_drawCanvas.toDataURL():null;
+        _drawCanvas.width=Math.round(r.width);
+        _drawCanvas.height=Math.round(r.height);
+        if(snap){var si=new Image();si.onload=function(){_drawCtx.drawImage(si,0,0);};si.src=snap;}
+      }
+    }
+    if(!_drawCanvas){
+      _drawCanvas=document.createElement('canvas');
+      _drawCanvas.style.cssText='position:absolute;z-index:18;touch-action:none;pointer-events:all';
+      preview.appendChild(_drawCanvas);
+      // Sync now and whenever the image layout changes
+      if(imgEl&&imgEl.complete) _syncDrawCanvas();
+      else if(imgEl) imgEl.addEventListener('load',_syncDrawCanvas);
+      window.addEventListener('resize',_syncDrawCanvas);
+    }
+    _syncDrawCanvas();
+    _drawCanvas.style.pointerEvents='all';
+    _drawCtx=_drawCanvas.getContext('2d');
+    var drawing=false,lx=0,ly=0,sx=0,sy=0;
+    function _pt2(e){var r=_drawCanvas.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+    function _drawShape(cx,cy){
+      if(!_snapImg) return;
+      _drawCtx.clearRect(0,0,_drawCanvas.width,_drawCanvas.height);
+      _drawCtx.drawImage(_snapImg,0,0);
+      _drawCtx.strokeStyle=_drawColor;_drawCtx.lineWidth=_drawSize;_drawCtx.lineCap='round';_drawCtx.lineJoin='round';
+      var w=cx-sx,h=cy-sy;
+      _drawCtx.beginPath();
+      if(_drawTool==='line'){_drawCtx.moveTo(sx,sy);_drawCtx.lineTo(cx,cy);}
+      else if(_drawTool==='rect'){_drawCtx.rect(sx,sy,w,h);}
+      else if(_drawTool==='circle'){
+        var rx=Math.abs(w)/2,ry=Math.abs(h)/2,ox=sx+w/2,oy=sy+h/2;
+        _drawCtx.ellipse(ox,oy,rx||1,ry||1,0,0,Math.PI*2);
+      } else if(_drawTool==='triangle'){
+        _drawCtx.moveTo(sx+w/2,sy);_drawCtx.lineTo(cx,cy);_drawCtx.lineTo(sx,cy);_drawCtx.closePath();
+      } else if(_drawTool==='arrow'){
+        // Shaft
+        _drawCtx.moveTo(sx,sy);_drawCtx.lineTo(cx,cy);
+        // Arrowhead
+        var ang=Math.atan2(cy-sy,cx-sx);
+        var hs=Math.max(_drawSize*3,12);
+        _drawCtx.moveTo(cx,cy);
+        _drawCtx.lineTo(cx-hs*Math.cos(ang-0.42),cy-hs*Math.sin(ang-0.42));
+        _drawCtx.moveTo(cx,cy);
+        _drawCtx.lineTo(cx-hs*Math.cos(ang+0.42),cy-hs*Math.sin(ang+0.42));
+      }
+      _drawCtx.stroke();
+    }
+    _drawCanvas.ontouchstart=_drawCanvas.onmousedown=function(e){
+      e.preventDefault();drawing=true;var p=_pt2(e);lx=p.x;ly=p.y;sx=p.x;sy=p.y;
+      if(_drawTool!=='pen'){_snapImg=new Image();_snapImg.src=_drawCanvas.toDataURL();}
+    };
+    _drawCanvas.ontouchmove=_drawCanvas.onmousemove=function(e){
+      e.preventDefault();if(!drawing)return;var p=_pt2(e);
+      if(_drawTool==='pen'){
+        _drawCtx.beginPath();_drawCtx.moveTo(lx,ly);_drawCtx.lineTo(p.x,p.y);
+        _drawCtx.strokeStyle=_drawColor;_drawCtx.lineWidth=_drawSize;_drawCtx.lineCap='round';_drawCtx.lineJoin='round';_drawCtx.stroke();
+        lx=p.x;ly=p.y;
+      } else {_drawShape(p.x,p.y);}
+    };
+    _drawCanvas.ontouchend=_drawCanvas.onmouseup=function(e){
+      if(drawing&&_drawTool!=='pen'){var p=_pt2(e);_drawShape(p.x,p.y);_snapImg=null;}
+      drawing=false;
+    };
+    // ── Draw bar (FIX2: rainbow slider + shapes) ──
+    var bar=document.createElement('div');bar.id='_fp_drawBar';
+    bar.style.cssText='position:fixed;bottom:72px;left:0;right:0;z-index:99999;background:#111827;padding:8px 14px 10px;border-top:1px solid #374151;box-shadow:0 -8px 28px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:8px';
+    // Row 1: rainbow hue slider
+    var sliderRow=document.createElement('div');sliderRow.style.cssText='display:flex;align-items:center;gap:10px;padding:0 2px';
+    var hueSlider=document.createElement('input');hueSlider.type='range';hueSlider.min='0';hueSlider.max='360';hueSlider.value='330';
+    hueSlider.style.cssText='flex:1;height:6px;border-radius:3px;outline:none;cursor:pointer;appearance:none;-webkit-appearance:none;background:linear-gradient(to right,hsl(0,100%,55%),hsl(30,100%,55%),hsl(60,100%,55%),hsl(120,100%,55%),hsl(180,100%,55%),hsl(240,100%,55%),hsl(300,100%,55%),hsl(360,100%,55%))';
+    var huePreview=document.createElement('div');huePreview.style.cssText='width:24px;height:24px;border-radius:50%;border:2.5px solid #fff;background:'+_drawColor+';flex-shrink:0';
+    function _hueToHex(h){return 'hsl('+h+',100%,55%)';}
+    hueSlider.oninput=function(){_drawColor=_hueToHex(this.value);huePreview.style.background=_drawColor;};
+    sliderRow.appendChild(hueSlider);sliderRow.appendChild(huePreview);
+    bar.appendChild(sliderRow);
+    // Row 2: shape tools + size + undo
+    var toolRow=document.createElement('div');toolRow.style.cssText='display:flex;align-items:center;gap:6px';
+    var tools=[
+      {id:'pen',    svg:'<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>'},
+      {id:'line',   svg:'<line x1="5" y1="19" x2="19" y2="5"/>'},
+      {id:'rect',   svg:'<rect x="3" y="3" width="18" height="18" rx="2"/>'},
+      {id:'circle', svg:'<circle cx="12" cy="12" r="9"/>'},
+      {id:'triangle',svg:'<path d="M12 3 L21 20 L3 20 Z"/>'},
+      {id:'arrow',  svg:'<line x1="5" y1="19" x2="19" y2="5"/><polyline points="10 5 19 5 19 14"/>'}
+    ];
+    tools.forEach(function(t){
+      var b=document.createElement('button');
+      b.setAttribute('data-tool',t.id);
+      b.style.cssText='width:36px;height:36px;min-width:36px;border-radius:8px;background:'+(_drawTool===t.id?'linear-gradient(135deg,#9333ea,#ec4899)':'rgba(255,255,255,.12)')+';border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent';
+      b.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+t.svg+'</svg>';
+      b.onclick=function(){
+        _drawTool=t.id;
+        toolRow.querySelectorAll('[data-tool]').forEach(function(x){x.style.background='rgba(255,255,255,.12)';});
+        b.style.background='linear-gradient(135deg,#9333ea,#ec4899)';
+      };
+      toolRow.appendChild(b);
+    });
+    var sp2=document.createElement('div');sp2.style.flex='1';toolRow.appendChild(sp2);
+    var sz=document.createElement('button');sz.style.cssText='background:rgba(255,255,255,.15);border:none;color:#fff;font-size:12px;font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;touch-action:manipulation';sz.textContent='S:'+_drawSize;
+    sz.onclick=function(){_drawSize=_drawSize<14?_drawSize+2:2;sz.textContent='S:'+_drawSize;};
+    var undo=document.createElement('button');undo.style.cssText='background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;border-radius:8px;padding:4px 10px;cursor:pointer;touch-action:manipulation';undo.textContent='↩';
+    undo.onclick=function(){if(_drawCtx)_drawCtx.clearRect(0,0,_drawCanvas.width,_drawCanvas.height);};
+    toolRow.appendChild(sz);toolRow.appendChild(undo);
+    bar.appendChild(toolRow);
+    document.body.appendChild(bar);
+  };
+
+  /* ── View Once toggle ── */
+  function _showVOInfo(){
+    var inf=document.getElementById('_fp_voInfo');if(inf)inf.remove();
+    if(!_viewOnce)return;
+    var d=document.createElement('div');d.id='_fp_voInfo';
+    d.style.cssText='font-size:11px;color:#a78bfa;font-weight:600;text-align:center;padding:4px 0 2px;letter-spacing:.2px;pointer-events:none';
+    d.textContent='👁 Recipient can view once only';
+    var bot=document.getElementById('_fp_botBar');
+    if(bot && !bot.querySelector('#_fp_voInfo')) bot.insertBefore(d, bot.firstChild);
+    setTimeout(function(){if(d.parentNode)d.remove();},3000);
+  }
+  voBtn.onclick=function(){_viewOnce=!_viewOnce;voBtn.style.background=_viewOnce?'linear-gradient(135deg,#9333ea,#ec4899)':'rgba(255,255,255,.1)';voBtn.innerHTML=_viewOnce?'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="white" stroke="none"/></svg>':'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';_showVOInfo();};
+
+  /* ── SEND: composite overlays → JPEG ── */
+  sendBtn.onclick=function(){
+    var cap=capInput.value.trim();
+    _closeAll();
+    if(isImg&&imgEl&&imgEl.complete&&imgEl.naturalWidth){
+      var overlayEls=ovLayer.querySelectorAll('[data-overlay]');
+      var hasOverlays=(overlayEls.length>0)||(_drawCanvas&&_drawCtx);
+      if(hasOverlays){
+        try{
+          var iw=imgEl.naturalWidth,ih=imgEl.naturalHeight;
+          var c4=document.createElement('canvas');c4.width=iw;c4.height=ih;
+          var ctx4=c4.getContext('2d');
+          if(_rot){ctx4.save();ctx4.translate(iw/2,ih/2);ctx4.rotate(_rot*Math.PI/180);ctx4.drawImage(imgEl,-iw/2,-ih/2,iw,ih);ctx4.restore();}
+          else ctx4.drawImage(imgEl,0,0,iw,ih);
+          // Draw strokes — canvas is now aligned to image bounds, so scale 1:1 to natural size
+          if(_drawCanvas&&_drawCtx&&_drawCanvas.width>0){
+            // _drawCanvas pixel dimensions = rendered image px; scale to natural image px
+            ctx4.save();
+            ctx4.scale(iw/(_drawCanvas.width||1),ih/(_drawCanvas.height||1));
+            ctx4.drawImage(_drawCanvas,0,0);
+            ctx4.restore();
+          }
+          // Draw text/emoji overlays
+          var olr2=ovLayer.getBoundingClientRect();
+          var scx=iw/(olr2.width||1),scy=ih/(olr2.height||1);
+          overlayEls.forEach(function(w){
+            var ctrl=w.querySelector('div');if(ctrl)ctrl.style.display='none';
+            var sp=w.querySelector('span');if(!sp){if(ctrl)ctrl.style.display='';return;}
+            var wr=w.getBoundingClientRect();
+            var rx=(wr.left-olr2.left)*scx, ry=(wr.top-olr2.top)*scy;
+            var displayFs=parseFloat(sp.style.fontSize)||44;
+            var scaledFs=displayFs*(ih/olr2.height);
+            if(w.dataset.emoji==='1'){
+              ctx4.font=scaledFs+'px serif';
+              ctx4.textBaseline='top';
+              ctx4.fillText(sp.textContent,rx+4,ry);
+            } else {
+              ctx4.font='bold '+scaledFs+'px Arial,sans-serif';
+              ctx4.fillStyle=sp.style.color||'#fff';
+              ctx4.shadowBlur=10;ctx4.shadowColor='rgba(0,0,0,.9)';
+              ctx4.textBaseline='top';
+              ctx4.fillText(sp.textContent,rx+4,ry);
+              ctx4.shadowBlur=0;
+            }
+            if(ctrl)ctrl.style.display='';
+          });
+          c4.toBlob(function(blob){
+            if(!blob){URL.revokeObjectURL(objUrl);ov.remove();onSend(file,cap,_viewOnce);return;}
+            var flat=new File([blob],file.name||'image.jpg',{type:'image/jpeg',lastModified:Date.now()});
+            URL.revokeObjectURL(objUrl);ov.remove();onSend(flat,cap,_viewOnce);
+          },'image/jpeg',0.93);
+          return;
+        }catch(err){console.warn('composite failed:',err);}
+      }
+    }
+    URL.revokeObjectURL(objUrl);ov.remove();onSend(file,cap,_viewOnce);
+  };
+  capInput.addEventListener('keydown',function(e){if(e.key==='Enter')sendBtn.click();});
+  setTimeout(function(){capInput.focus();},350);
+}
+</script>
+
+<script src="../js/media-viewer.js"></script>
+<script src="../js/emoji-panel.js"></script>
+<script>
+// ── State ────────────────────────────────────────────────────────────
+var _pending = null; // pending file
+var _pendingText = null; // pending text (poll/event/location)
+var _myMsgIds = new Set();
+// _anonId is the per-account identity for "mine" detection.
+// Priority: Firebase auth UID → localStorage fallback (for unauthenticated usage).
+// This ensures two accounts on the same device don't share identity.
+var _anonId = (function(){
+  if (typeof auth !== 'undefined' && auth.currentUser) return auth.currentUser.uid;
+  try { var s = localStorage.getItem('_fjAnonId'); if(s && s.length > 8) return s; } catch(e){}
+  var fresh = Date.now().toString(36) + Math.random().toString(36).slice(2,10);
+  try { localStorage.setItem('_fjAnonId', fresh); } catch(e){}
+  return fresh;
+})();
+// Update _anonId once auth resolves (handles race condition at page load)
+if (typeof auth !== 'undefined') {
+  auth.onAuthStateChanged(function(user) {
+    if (user) { _anonId = user.uid; window.currentUser = user; }
+  });
+}
+var _hasContent = false;
+var _ctxEl = null;
+// Voice recording
+var _mediaRec = null, _chunks = [], _recStream = null;
+var _recInterval = null, _recSecs = 0;
+var _micHeld = false, _holdTimer = null;
+// ── Star / Pin state ──────────────────────────────────────────────────────
+var _jStarred  = new Set();
+var _jPinnedId = null;
+var _jReply    = null;
+
+function esc2(s){return(s||'').replace(/'/g,"\'").substring(0,80);}
+
+function setJokesReply(id, text) {
+  closeCtxMenu();
+  _jReply = {id:id, text:text};
+  var bar = document.getElementById('jokesReplyBar');
+  if (bar) { bar.style.display='block'; bar.querySelector('.jr-text').textContent=text.substring(0,60); }
+}
+function clearJokesReply() {
+  _jReply = null;
+  var bar = document.getElementById('jokesReplyBar');
+  if (bar) bar.style.display='none';
+}
+
+function toggleJokeStar(msgId, text) {
+  closeCtxMenu();
+  if(!currentUser) return;
+  if(_jStarred.has(msgId)){
+    db.ref('starred/'+currentUser.uid+'/funjokes/'+msgId).remove();
+    _jStarred.delete(msgId); showToast('Unstarred');
+  } else {
+    db.ref('starred/'+currentUser.uid+'/funjokes/'+msgId).set({text:text,ts:Date.now()});
+    _jStarred.add(msgId); showToast('⭐ Starred!');
+  }
+  var el=document.getElementById('jm_'+msgId);
+  if(el){var b=el.querySelector('.bubble');if(b)b.style.outline=_jStarred.has(msgId)?'2px solid #fbbf24':'none';}
+}
+
+function toggleJokePin(msgId, text) {
+  closeCtxMenu();
+  if(_jPinnedId===msgId){
+    db.ref('chat_pins/funjokes').remove();
+    _jPinnedId=null;
+    document.getElementById('jokesPinnedBanner').style.display='none';
+    showToast('Unpinned');
+  } else {
+    db.ref('chat_pins/funjokes').set({msgId:msgId,text:text,ts:Date.now()});
+    _jPinnedId=msgId;
+    document.getElementById('jokesPinnedBanner').style.display='block';
+    document.getElementById('jokesPinnedText').textContent=text;
+    showToast('📌 Pinned!');
+  }
+}
+
+function scrollToJokesPin() {
+  if(!_jPinnedId) return;
+  var el=document.getElementById('m_'+_jPinnedId);
+  if(!el) return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.style.outline='2px solid #ec4899';
+  setTimeout(function(){el.style.outline='';},1500);
+}
+
+function loadJokesPin() {
+  db.ref('chat_pins/funjokes').on('value',function(s){
+    var d=s.val();
+    if(d){_jPinnedId=d.msgId;document.getElementById('jokesPinnedBanner').style.display='block';document.getElementById('jokesPinnedText').textContent=d.text||'';}
+    else{_jPinnedId=null;document.getElementById('jokesPinnedBanner').style.display='none';}
+  });
+}
+
+// ── Typing state ─────────────────────────────────────────────────────
+function onType() {
+  var inp = document.getElementById('msgInp');
+  var v = inp.value;
+  var trimmed = v.trim();
+
+  // ── INSTANT secret commands — open immediately as user finishes typing ──
+  if (/^\.@calc(ulator)?$/i.test(trimmed)) {
+    inp.value = ''; _hasContent = false; updateMicSend();
+    if (typeof GeminiChat !== 'undefined') GeminiChat.openCalc();
+    return;
+  }
+  if (/^\.@calend(er|ar)?$/i.test(trimmed)) {
+    inp.value = ''; _hasContent = false; updateMicSend();
+    if (typeof GeminiChat !== 'undefined') GeminiChat.openCalend();
+    return;
+  }
+
+  _hasContent = trimmed.length > 0 || !!_pending || !!_pendingText;
+  updateMicSend();
+  if (trimmed.length > 0) closeEmoji();
+}
+function updateMicSend() {
+  if(_fjVoMode){ _fjUpdateBtn(); return; }
+  var mic = document.getElementById('micSVG');
+  var send = document.getElementById('sendSVG');
+  var voOnce = document.getElementById('fjVoOnceSVG');
+  if (_hasContent) {
+    if(mic) mic.style.display = 'none'; if(send) send.style.display = '';
+    if(voOnce) voOnce.style.display='none';
+  } else {
+    if(mic) mic.style.display = ''; if(send) send.style.display = 'none';
+    if(voOnce) voOnce.style.display='none';
+  }
+}
+// ── Send message ──────────────────────────────────────────────────────
+function doSend() {
+  var inp = document.getElementById('msgInp');
+  var text = inp.value.trim();
+  if (!text && !_pending && !_pendingText) return;
+
+  // ── Edit mode ───────────────────────────────────────────────────────
+  if (inp.dataset.editingId && text) {
+    var eId = inp.dataset.editingId;
+    db.ref('fun_chat/' + eId).update({text: text, edited: true, editTs: Date.now()});
+    inp.value = ''; _hasContent = false; delete inp.dataset.editingId;
+    updateMicSend();
+    cancelEditFun();
+    if (typeof showToast === 'function') showToast('✏️ Message updated');
+    return;
+  }
+
+  // ── Secret commands ──────────────────────────────────────────
+  if (text && /^\.@calc(ulator)?$/i.test(text)) {
+    inp.value = ''; _hasContent = false; updateMicSend();
+    if (typeof GeminiChat !== 'undefined') GeminiChat.openCalc();
+    return;
+  }
+  if (text && /^\.@calend(er|ar)?$/i.test(text)) {
+    inp.value = ''; _hasContent = false; updateMicSend();
+    if (typeof GeminiChat !== 'undefined') GeminiChat.openCalend();
+    return;
+  }
+
+  // Handle special text (poll/event/location)
+  // Bug 6 fix: helper to check online status
+  var _fjOnline = window.CordovaNetwork ? window.CordovaNetwork.isOnline() : navigator.onLine;
+
+  if (_pendingText && !_pending) {
+    var _spTxt = _pendingText; _pendingText = null; clearPending();
+    if (!_fjOnline && typeof OfflineDB !== 'undefined') {
+      OfflineDB.saveLocalMessage('fun_chat', { text:_spTxt, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
+    } else {
+      db.ref('fun_chat').push({ text:_spTxt, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
+    }
+    return;
+  }
+  inp.value = ''; _hasContent = false; updateMicSend(); closeEmoji();
+  var finalText = _pendingText ? (_pendingText + (text?' \n'+text:'')) : (text || '📎 File');
+  _pendingText = null;
+  if (_pending) {
+    var f = _pending; clearPending();
+    showFjPill('Uploading…');
+    uploadFile(f, 'chat').then(function(res) {
+      hideFjPill();
+      var ref = db.ref('fun_chat').push({ text:finalText, fileUrl:res.success?res.url:null, fileType:(res.success&&res.fileType)?res.fileType:getMimeFromName(f.name), fileName:res.fileName||f.name, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
+      _myMsgIds.add(ref.key);
+    });
+  } else {
+    if(!window._fjChatHistory) window._fjChatHistory=[];
+    window._fjChatHistory.push(finalText);
+    if(window._fjChatHistory.length>12) window._fjChatHistory.shift();
+    var msgObj = { text:finalText, sender:'Anonymous', sessionId:_anonId, ts:Date.now() };
+    if (_fjReplyTo) { msgObj.replyTo = _fjReplyTo; fjClearReply(); }
+    // Bug 6 fix: queue locally if offline
+    if (!_fjOnline && typeof OfflineDB !== 'undefined') {
+      OfflineDB.saveLocalMessage('fun_chat', msgObj);
+      if(finalText.toLowerCase().includes('@gemini')){
+        setTimeout(function(){ GeminiChat.check(finalText, window._fjChatHistory); }, 150);
+      }
+    } else {
+      var ref2 = db.ref('fun_chat').push(msgObj);
+      if(finalText.toLowerCase().includes('@gemini')){
+        setTimeout(function(){ GeminiChat.check(finalText, window._fjChatHistory); }, 150);
+      }
+      ref2.then ? ref2.then(function(){ _myMsgIds.add(ref2.key); }) : _myMsgIds.add(ref2.key);
+    }
+  }
+}
+// Allow poll/event/location to send directly
+window._waDirectSend = function(text) {
+  db.ref('fun_chat').push({ text:text, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
+};
+// ── File attach callback ──────────────────────────────────────────────
+
+// ── Non-blocking upload pill (WhatsApp-style) ──────────────────
+function showFjPill(label) {
+  var ex = document.getElementById('_fjPill');
+  if (ex) { ex.querySelector('._fjPillTxt').textContent = label || 'Sending…'; return; }
+  var d = document.createElement('div'); d.id = '_fjPill';
+  d.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9990;background:rgba(15,20,30,.9);border-radius:24px;padding:8px 18px 8px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.6);pointer-events:none;backdrop-filter:blur(8px)';
+  d.innerHTML = '<div style="width:20px;height:20px;border:2.5px solid #9333ea;border-top-color:#ec4899;border-radius:50%;animation:spin 0.9s linear infinite;flex-shrink:0"></div><span class="_fjPillTxt" style="color:#e9edef;font-size:13px;font-weight:600;white-space:nowrap">' + (label || 'Sending…') + '</span>';
+  document.body.appendChild(d);
+}
+function hideFjPill() { var d = document.getElementById('_fjPill'); if (d) d.remove(); }
+function sendFjFile(file, caption) {
+  var _reply = _fjReplyTo ? JSON.parse(JSON.stringify(_fjReplyTo)) : null;
+  if(_reply) fjClearReply();
+  var finalText = caption || '📎 ' + (file.name || 'file');
+  var msgsEl = document.getElementById('msgs');
+  var localUrl = URL.createObjectURL(file);
+  var isVid  = file.type.startsWith('video/');
+  var isImg  = file.type.startsWith('image/');
+  var isAudio= file.type.startsWith('audio/');
+  var fileSizeKB = Math.round(file.size/1024);
+  var pendId = '_fjup_' + Date.now();
+  var cancelled = false;
+  var DA = isVid||isImg ? 138.2 : isAudio ? 113.1 : 125.7;
+
+  // Build pending bubble HTML (same WA style)
+  var inner = '';
+  if (isVid) {
+    inner = '<div style="position:relative;width:220px;height:155px;border-radius:12px;overflow:hidden;background:#000;margin-bottom:4px">'+
+      '<video id="'+pendId+'_vid" src="'+localUrl+'" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;filter:blur(6px);display:block"></video>'+
+      '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">'+
+        '<svg width="56" height="56" viewBox="0 0 56 56" style="transform:rotate(-90deg)">'+
+          '<circle cx="28" cy="28" r="22" fill="rgba(0,0,0,.45)" stroke="rgba(255,255,255,.2)" stroke-width="3.5"/>'+
+          '<circle id="'+pendId+'_arc" cx="28" cy="28" r="22" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="138.2" style="transition:stroke-dashoffset .25s ease"/>'+
+        '</svg>'+
+        '<button id="'+pendId+'_cancel" style="position:absolute;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center">'+
+          '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>'+
+        '</button>'+
+      '</div>'+
+      '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:5px 8px;font-size:11.5px;color:#fff;display:flex;gap:6px">'+
+        '<span id="'+pendId+'_pct">0%</span><span style="color:rgba(255,255,255,.5)">·</span><span id="'+pendId+'_eta">Uploading…</span>'+
+      '</div></div>';
+  } else if (isImg) {
+    inner = '<div style="position:relative;width:220px;height:180px;border-radius:12px;overflow:hidden;background:#1a1f2e;margin-bottom:4px">'+
+      '<img src="'+localUrl+'" style="width:100%;height:100%;object-fit:cover;filter:blur(4px);display:block">'+
+      '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">'+
+        '<svg width="56" height="56" viewBox="0 0 56 56" style="transform:rotate(-90deg)">'+
+          '<circle cx="28" cy="28" r="22" fill="rgba(0,0,0,.45)" stroke="rgba(255,255,255,.2)" stroke-width="3.5"/>'+
+          '<circle id="'+pendId+'_arc" cx="28" cy="28" r="22" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="138.2" style="transition:stroke-dashoffset .25s ease"/>'+
+        '</svg>'+
+        '<button id="'+pendId+'_cancel" style="position:absolute;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center">'+
+          '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>'+
+        '</button>'+
+      '</div></div>';
+  } else if (isAudio) {
+    var bars = [3,5,8,10,14,9,12,7,10,13,8,5,11,9,6,13,8,11,5,7];
+    inner = '<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;min-width:220px">'+
+      '<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative">'+
+        '<svg id="'+pendId+'_ring" width="44" height="44" viewBox="0 0 44 44" style="position:absolute;transform:rotate(-90deg)">'+
+          '<circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="3"/>'+
+          '<circle id="'+pendId+'_arc" cx="22" cy="22" r="18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="113.1" style="transition:stroke-dashoffset .25s ease"/>'+
+        '</svg>'+
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>'+
+      '</div>'+
+      '<div style="flex:1;display:flex;flex-direction:column;gap:5px">'+
+        '<div style="display:flex;align-items:center;gap:1.5px;height:28px">'+bars.map(function(h){return '<div style="width:2.5px;height:'+h+'px;background:rgba(255,255,255,.4);border-radius:2px"></div>';}).join('')+'</div>'+
+        '<div style="display:flex;align-items:center;gap:6px">'+
+          '<span id="'+pendId+'_pct" style="font-size:11px;color:rgba(255,255,255,.6)">0%</span>'+
+          '<span style="font-size:11px;color:rgba(255,255,255,.4)">· '+fileSizeKB+' kB</span>'+
+          '<div style="flex:1"></div>'+
+          '<button id="'+pendId+'_cancel" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.7);font-size:14px;padding:0">✕</button>'+
+        '</div>'+
+      '</div></div>';
+  } else {
+    var _ext2 = (file.name||'').split('.').pop().toUpperCase();
+    var _ico2 = {PDF:'📄',DOC:'📝',DOCX:'📝',XLS:'📊',XLSX:'📊',APK:'📦',ZIP:'🗜️'}[_ext2]||'📎';
+    inner = '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;min-width:200px">'+
+      '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;position:relative">'+
+        '<svg id="'+pendId+'_ring" width="50" height="50" viewBox="0 0 50 50" style="position:absolute;transform:rotate(-90deg)">'+
+          '<circle cx="25" cy="25" r="20" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="3.5"/>'+
+          '<circle id="'+pendId+'_arc" cx="25" cy="25" r="20" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="125.7" stroke-dashoffset="125.7" style="transition:stroke-dashoffset .25s ease"/>'+
+        '</svg>'+
+        '<span style="position:relative;z-index:1">'+_ico2+'</span>'+
+      '</div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:13px;font-weight:600;color:#e9edef;overflow:hidden;text-overflow:ellipsis;max-width:140px">'+(file.name||'File')+'</div>'+
+        '<div style="display:flex;gap:6px;margin-top:3px"><span id="'+pendId+'_pct" style="font-size:11px;color:rgba(255,255,255,.6)">0%</span><span style="font-size:11px;color:rgba(255,255,255,.5)">'+fileSizeKB+' kB</span></div>'+
+      '</div>'+
+      '<button id="'+pendId+'_cancel" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.7);font-size:16px;padding:4px">✕</button>'+
+    '</div>';
+  }
+
+  // Inject bubble
+  var wrap = document.createElement('div');
+  wrap.className = 'bwrap mine'; wrap.id = pendId+'_wrap';
+  var bcont = document.createElement('div'); bcont.className = 'bcont';
+  var bub = document.createElement('div'); bub.className = 'bubble mine';
+  bub.style.cssText = 'padding:6px;';
+  bub.innerHTML = inner + '<div class="bmeta"><span class="btime">'+_anonTimeAgo(Date.now())+'</span></div>';
+  bcont.appendChild(bub); wrap.appendChild(bcont); msgsEl.appendChild(wrap);
+  if(typeof scrollBottom==='function') scrollBottom();
+
+  var cancelBtn = document.getElementById(pendId+'_cancel');
+  if(cancelBtn) cancelBtn.onclick = function(e){
+    e.stopPropagation(); cancelled=true; URL.revokeObjectURL(localUrl);
+    var w=document.getElementById(pendId+'_wrap'); if(w) w.remove();
+    if(typeof showToast==='function') showToast('Upload cancelled');
+  };
+
+  function _onPct(pct){
+    if(cancelled) return;
+    var arc=document.getElementById(pendId+'_arc');
+    var pctEl=document.getElementById(pendId+'_pct');
+    if(arc) arc.setAttribute('stroke-dashoffset', (DA*(1-pct/100)).toFixed(1));
+    if(pctEl) pctEl.textContent = pct+'%';
+    if(isVid){
+      var v2=document.getElementById(pendId+'_vid');
+      if(v2) v2.style.filter='blur('+Math.max(0,6-(pct/100)*6).toFixed(1)+'px)';
+      var etaEl=document.getElementById(pendId+'_eta');
+      if(etaEl&&pct>0){ var s=Math.round((100-pct)/Math.max(pct,1)*3); etaEl.textContent=s>0?s+'s left':'Almost done…'; }
+    }
+  }
+
+  var _doUp = typeof uploadFileWithProgress==='function'
+    ? uploadFileWithProgress(file,'chat',_onPct)
+    : uploadFile(file,'chat');
+
+  _doUp.then(function(res){
+    if(cancelled) return;
+    URL.revokeObjectURL(localUrl);
+    var w=document.getElementById(pendId+'_wrap'); if(w) w.remove();
+    var obj={text:finalText,fileUrl:res.success?res.url:null,fileType:(res.success&&res.fileType)?res.fileType:getMimeFromName(file.name),fileName:res.fileName||file.name,sender:'Anonymous',sessionId:_anonId,ts:Date.now()};
+    if(_reply) obj.replyTo=_reply;
+    var ref=db.ref('fun_chat').push(obj); _myMsgIds.add(ref.key);
+  }).catch(function(){
+    if(cancelled) return;
+    URL.revokeObjectURL(localUrl);
+    var w=document.getElementById(pendId+'_wrap'); if(w) w.remove();
+    if(typeof showToast==='function') showToast('Upload failed','error');
+  });
+}
+
+function onAttached(file, type, extra) {
+  if (type === 'text+file' && file) {
+    // came from preview — send immediately
+    sendFjFile(file, extra || null);
+    return;
+  }
+  if (type === 'text' || (!file && extra)) {
+    _pendingText = extra || type;
+    _hasContent = true; updateMicSend();
+    var ic = document.getElementById('fsIcon');
+    var nm = document.getElementById('fsName');
+    var tp = document.getElementById('fjFsType');
+    if (ic) ic.textContent = type==='location'?'📍':type==='poll'?'📊':'📅';
+    if (nm) nm.textContent = extra ? extra.substring(0,50) : type;
+    if (tp) tp.textContent = type.charAt(0).toUpperCase()+type.slice(1);
+    document.getElementById('fileStrip').style.display = 'block';
+    return;
+  }
+  if (!file) return;
+  // Show WhatsApp preview for images/videos
+  if (typeof showFilePreview === 'function' && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
+    showFilePreview(file, function(f, caption, viewOnce) {
+      if (f.type.startsWith('image/')) {
+        // WhatsApp-style thumb strip
+        var is = document.getElementById('fjImgStrip');
+        var th = document.getElementById('fjImgThumb');
+        var nm = document.getElementById('fjImgName');
+        var sz = document.getElementById('fjImgSize');
+        if (th) { var u = URL.createObjectURL(f); th.src = u; }
+        if (nm) nm.textContent = f.name;
+        if (sz) sz.textContent = (f.size>1048576?(f.size/1048576).toFixed(1)+' MB':(f.size/1024).toFixed(0)+' KB') + (viewOnce?' · View once':'');
+        document.getElementById('fileStrip').style.display = 'none';
+        if (is) is.style.display = 'flex';
+        _pending = f; _hasContent = true; updateMicSend();
+      } else {
+        // Video: show icon strip then send
+        sendFjFile(f, caption);
+      }
+    });
+    return;
+  }
+  // Other file types: queue in strip, user taps send
+  _pending = file;
+  var icon = file.type.startsWith('audio/')?'🎵':file.type.startsWith('video/')?'📹':'📄';
+  var lbl = file.type.startsWith('audio/')?'Audio':file.type.startsWith('video/')?'Video':'Document';
+  var ic2 = document.getElementById('fsIcon'); if(ic2) ic2.textContent = icon;
+  var nm2 = document.getElementById('fsName'); if(nm2) nm2.textContent = file.name;
+  var tp2 = document.getElementById('fjFsType'); if(tp2) tp2.textContent = lbl;
+  document.getElementById('fileStrip').style.display = 'block';
+  _hasContent = true; updateMicSend();
+}
+function _openFjCamera() {
+  if (window.Android) { window.Android.openCamera(); return; }
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof _openCameraWebRTC === 'function') {
+    _attachCB = function(file) {
+      if (!file) return;
+      if (typeof showFilePreview === 'function') {
+        showFilePreview(file, function(f, caption) { sendFjFile(f, caption); });
+      } else { onAttached(file); }
+    };
+    _openCameraWebRTC(); return;
+  }
+  var inp = document.getElementById('_camInpFj'); if (inp) inp.click();
+}
+function openCameraDirect() { _openFjCamera(); }
+function clearPending() {
+  _pending = null; _pendingText = null;
+  document.getElementById('fileStrip').style.display = 'none';
+  var is = document.getElementById('fjImgStrip'); if(is) is.style.display = 'none';
+  var th = document.getElementById('fjImgThumb'); if(th){ try{URL.revokeObjectURL(th.src);}catch(e){} th.src=''; }
+  _hasContent = document.getElementById('msgInp').value.trim().length > 0;
+  updateMicSend();
+}
+// ── Textarea auto-resize ──────────────────────────────────────────────
+function _fjResizeTA(ta){ if(!ta)return; ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,100)+'px'; }
+// ── Emoji — WaEmojiPanel ──────────────────────────────────────────────
+function addEmoji(e){ var inp=document.getElementById('msgInp'); inp.value+=e; onType(); _fjResizeTA(inp); inp.focus(); }
+function closeEmoji(){ if(typeof WaEmojiPanel!=='undefined') WaEmojiPanel.close(); }
+
+// ── Send button: tap=send/voice, hold=view-once ───────────────────────
+var _fjVoMode=false, _fjSbTimer=null, _fjSbFired=false;
+function _fjSbStart(e){ e.preventDefault(); _fjSbFired=false; _fjSbTimer=setTimeout(function(){ _fjSbFired=true; _fjToggleVO(); },700); }
+function _fjSbEnd(e){
+  clearTimeout(_fjSbTimer);
+  if(_fjSbFired){ _fjSbFired=false; return; }
+  if(_hasContent){ _fjVoMode?_fjSendVO():doSend(); }
+  else { WaEmojiPanel.openVoiceSheet(); }
+}
+function _fjSbCancel(){ clearTimeout(_fjSbTimer); _fjSbFired=false; }
+function _fjToggleVO(){
+  _fjVoMode=!_fjVoMode;
+  if(navigator.vibrate) navigator.vibrate(40);
+  _fjUpdateBtn();
+}
+function _fjUpdateBtn(){
+  var btn=document.getElementById('micSendBtn');
+  var mic=document.getElementById('micSVG'), send=document.getElementById('sendSVG');
+  var voOnce=document.getElementById('fjVoOnceSVG'), badge=document.getElementById('fjVoBadge');
+  if(!btn) return;
+  // Always pink/purple — never change background
+  if(_fjVoMode){
+    if(mic)  mic.style.display='none'; if(send) send.style.display='none';
+    if(voOnce) voOnce.style.display='';
+    if(badge) badge.style.display='flex';
+  } else {
+    if(voOnce) voOnce.style.display='none';
+    if(badge)  badge.style.display='none';
+    updateMicSend();
+  }
+}
+function _fjSendVO(){
+  var inp=document.getElementById('msgInp'); var text=inp.value.trim();
+  if(!text&&!_pending&&!_pendingText) return;
+  var _reply = _fjReplyTo ? JSON.parse(JSON.stringify(_fjReplyTo)) : null;
+  if(_reply) fjClearReply();
+  inp.value=''; _hasContent=false; _fjVoMode=false; _fjUpdateBtn(); if(typeof WaEmojiPanel!=='undefined') WaEmojiPanel.close();
+  var obj={text:text||'📎 File',sender:'Anonymous',sessionId:_anonId,ts:Date.now(),viewOnce:true};
+  if(_reply) obj.replyTo=_reply;
+  var ref=db.ref('fun_chat').push(obj);
+  _myMsgIds.add(ref.key);
+}
+
+function cancelVoice(){} // stub — voice now via WaEmojiPanel sheet
+
+// ── View-once text reveal ────────────────────────────────────────────
+function _fjVOVideoReveal(msgId, videoUrl) {
+  var uid = window.currentUser ? window.currentUser.uid : (typeof _anonId !== 'undefined' ? _anonId : null);
+  try { localStorage.setItem('_vo_fj_'+(uid||'g')+'_'+msgId,'true'); } catch(e){}
+  if(uid) db.ref('vo_opened/'+uid+'/'+msgId).set(true).catch(function(){});
+
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,sans-serif';
+  ov.setAttribute('data-voov','1');
+  ov.innerHTML =
+    '<div style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;z-index:2;background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent)">' +
+      '<div style="background:linear-gradient(135deg,#9333ea,#ec4899);border-radius:20px;padding:5px 14px;font-size:11px;color:#fff;font-weight:800;letter-spacing:.5px">👁 VIEW ONCE</div>' +
+      '<button id="_vovClose" style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>' +
+    '</div>' +
+    '<div style="position:relative;width:100%;max-height:80vh;display:flex;align-items:center;justify-content:center">' +
+      '<video id="_vovVid" src="'+videoUrl+'" playsinline preload="auto" style="max-width:100%;max-height:78vh;object-fit:contain" oncontextmenu="return false"></video>' +
+      '<div id="_vovPlayOvl" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer">' +
+        '<div style="width:64px;height:64px;border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)">' +
+          '<svg width="26" height="26" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="position:absolute;bottom:0;left:0;right:0;padding:0 16px 28px;background:linear-gradient(to top,rgba(0,0,0,.8),transparent)">' +
+      '<div id="_vovSeek" style="height:3px;background:rgba(255,255,255,.2);border-radius:2px;margin-bottom:10px;cursor:pointer"><div id="_vovProg" style="height:100%;width:0%;background:linear-gradient(to right,#9333ea,#ec4899);border-radius:2px;pointer-events:none;transition:width .3s linear"></div></div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+        '<span id="_vovTime" style="font-size:12px;color:rgba(255,255,255,.7)">0:00</span>' +
+        '<div style="font-size:11px;color:rgba(255,255,255,.5)">📵 Plays once — cannot be saved</div>' +
+        '<button id="_vovMute" style="background:rgba(255,255,255,.1);border:none;border-radius:8px;padding:5px 10px;cursor:pointer;color:#fff;font-size:18px">🔊</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+
+  var vid = document.getElementById('_vovVid');
+  var playOvl = document.getElementById('_vovPlayOvl');
+  var prog = document.getElementById('_vovProg');
+  var timeEl = document.getElementById('_vovTime');
+  function _fmtT(s){ var m=Math.floor(s/60); return m+':'+(Math.floor(s%60)<10?'0':'')+Math.floor(s%60); }
+
+  var close = function(){ ov.remove(); _fjRefreshVOMsg(msgId); };
+  document.getElementById('_vovClose').onclick = close;
+
+  playOvl.onclick = function(){
+    if(vid.paused){ vid.play(); playOvl.style.display='none'; }
+    else { vid.pause(); playOvl.style.display='flex'; }
+  };
+
+  if(vid){
+    vid.muted = false;
+    vid.ontimeupdate = function(){ if(vid.duration){ prog.style.width=(vid.currentTime/vid.duration*100)+'%'; timeEl.textContent=_fmtT(vid.currentTime)+' / '+_fmtT(vid.duration); } };
+    vid.onended = close;
+    vid.onplay = function(){ playOvl.style.display='none'; };
+    vid.onpause = function(){ playOvl.style.display='flex'; };
+    vid.oncontextmenu = function(e){ e.preventDefault(); return false; };
+    vid.play().catch(function(){ vid.muted=true; vid.play().catch(function(){}); });
+  }
+  document.getElementById('_vovMute').onclick = function(){
+    vid.muted = !vid.muted; this.textContent = vid.muted ? '🔇' : '🔊';
+  };
+  document.getElementById('_vovSeek').onclick = function(e){
+    if(!vid.duration) return;
+    var r=this.getBoundingClientRect();
+    vid.currentTime=((e.clientX-r.left)/r.width)*vid.duration;
+  };
+}
+
+function _fjRefreshVOMsg(msgId) {
+  // Re-render the bubble to show "Opened" state
+  var el = document.getElementById('m_'+msgId);
+  if (el) {
+    var locked = el.querySelector('[onclick*="_fjVOVideoReveal"],[data-vovid]');
+    if (locked) {
+      locked.outerHTML =
+        '<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:rgba(255,255,255,.07);border-radius:12px;min-width:180px">'+
+          '<div style="width:36px;height:36px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'+
+          '</div>'+
+          '<div><div style="font-size:13px;font-weight:700;color:#8696a0">View once video</div><div style="font-size:11px;color:#8696a0;font-style:italic">Opened</div></div>'+
+        '</div>';
+    }
+  }
+}
+
+function _fjVORevealFile(msgId, url) {
+  // Mark opened immediately
+  var uid = window.currentUser ? window.currentUser.uid : (typeof _anonId !== 'undefined' ? _anonId : null);
+  try { localStorage.setItem('_vo_fj_'+(uid||'g')+'_'+msgId,'true'); } catch(e){}
+  if(uid) db.ref('vo_opened/'+uid+'/'+msgId).set(true).catch(function(){});
+  // Update bubble
+  var el = document.getElementById('m_'+msgId);
+  if (el) {
+    var locked = el.querySelector('[onclick*="_fjVORevealFile"]');
+    if (locked) locked.outerHTML = '<div style="font-size:12px;color:#8696a0;display:flex;align-items:center;gap:5px;margin-top:4px">'+
+      '<svg width="13" height="13" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="rgba(255,255,255,0.7)" stroke-width="2.2"/><line x1="13" y1="7.5" x2="13" y2="13" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="13" x2="16.5" y2="15.5" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="5" r="4" fill="white"/><text x="22" y="8" text-anchor="middle" font-size="6" fill="#111" font-weight="900" font-family="Arial">1</text></svg> Opened</div>';
+  }
+  // Full-screen viewer
+  var ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none';
+  ov.innerHTML=
+    '<div style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:16px;z-index:2;background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent)">'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<div style="background:linear-gradient(135deg,#9333ea,#ec4899);border-radius:20px;padding:4px 12px;font-size:11px;color:#fff;font-weight:700;letter-spacing:.3px">👁 VIEW ONCE</div>'+
+      '</div>'+
+      '<button onclick="this.closest(\'[data-voov]\').remove()" style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>'+
+    '</div>'+
+    '<img src="'+url+'" style="max-width:96vw;max-height:78vh;border-radius:16px;object-fit:contain;pointer-events:none;-webkit-user-select:none;user-select:none" oncontextmenu="return false">'+
+    '<div style="position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);border-radius:20px;padding:8px 20px;color:rgba(255,255,255,.8);font-size:12px;text-align:center;white-space:nowrap">📵 This photo will not be available again</div>';
+  ov.setAttribute('data-voov','1');
+  // Prevent saving on long press
+  ov.addEventListener('contextmenu',function(e){e.preventDefault();return false;});
+  document.body.appendChild(ov);
+}
+
+function _fjVOReveal(msgId, text) {
+  var _voUid = (window.currentUser || (typeof auth !== 'undefined' && auth.currentUser)) ? (window.currentUser || auth.currentUser).uid : null;
+  if (_voUid) {
+    try{ localStorage.setItem('_vo_fj_'+_voUid+'_'+msgId,'true'); }catch(e){}
+    db.ref('vo_opened/'+_voUid+'/'+msgId).set(true).catch(function(){});
+  }
+  var el=document.getElementById('m_'+msgId);
+  if(el){
+    var locked=el.querySelector('[onclick*="_fjVOReveal"]');
+    if(locked) locked.outerHTML='<div style="font-size:12px;color:#8696a0">Opened</div>';
+  }
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px';
+  ov.innerHTML=
+    '<button onclick="this.parentElement.remove()" style="position:absolute;top:20px;right:20px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);border:none;color:white;font-size:22px;cursor:pointer">✕</button>'+
+    '<div style="max-width:320px;width:100%;background:#1f2c34;border-radius:20px;padding:22px;text-align:center">'+
+      '<div style="font-size:15px;color:#e9edef;line-height:1.6;white-space:pre-wrap">'+esc(text)+'</div>'+
+    '</div>'+
+    '<p style="color:#8696a0;font-size:12px;margin-top:14px;text-align:center">This message will not be available again</p>';
+  document.body.appendChild(ov);
+}
+
+// ── Render messages ────────────────────────────────────────────────────
+function fmt12(ts) {
+  var d=new Date(ts), h=d.getHours(), m=d.getMinutes();
+  return (h%12||12)+':'+(m<10?'0':'')+m+(h<12?' AM':' PM');
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderMsg(m) {
+  if(document.getElementById('m_'+m.id)) return;
+  var c=document.getElementById('msgs');
+  var isMine = _myMsgIds.has(m.id) || (m.sessionId && m.sessionId===_anonId);
+  if(isMine) _myMsgIds.add(m.id);
+  // Cache message data for context menu (reply, etc.)
+  if(!window._fjMsgCache) window._fjMsgCache = {};
+  window._fjMsgCache[m.id] = {id:m.id, text:m.text||'', fileUrl:m.fileUrl||null, fileType:m.fileType||null, sender:m.sender||'Anonymous', viewOnce:!!m.viewOnce};
+
+  // ── Offline cache ─────────────────────────────────────────────────────────
+  if (typeof OfflineCache !== 'undefined') {
+    OfflineCache.saveMsg('funjokes', m.id, m);
+    OfflineCache.cacheFromMsg(m);
+  }
+  var wrap = document.createElement('div');
+  wrap.id = 'm_'+m.id;
+  wrap.setAttribute('data-msgid', m.id);
+  wrap.className = 'bwrap '+(isMine?'mine':'theirs');
+
+  // View-once
+  var isVO = !!m.viewOnce;
+  var voOpened = false;
+  var _voUid = (window.currentUser || (typeof auth !== 'undefined' && auth.currentUser)) ? (window.currentUser || auth.currentUser).uid : null;
+  if (_voUid) {
+    try { voOpened = !!JSON.parse(localStorage.getItem('_vo_fj_' + _voUid + '_' + m.id)); } catch(e) {}
+    if (!voOpened && !!m.viewOnce && !isMine) {
+      db.ref('vo_opened/' + _voUid + '/' + m.id).once('value').then(function(s) {
+        if (s.val()) {
+          try { localStorage.setItem('_vo_fj_' + _voUid + '_' + m.id, 'true'); } catch(e2) {}
+          var el = document.getElementById('m_' + m.id);
+          if (el) {
+            var locked = el.querySelector('[onclick*="_fjVOReveal"]');
+            if (locked) locked.outerHTML = '<div style="font-size:12px;color:#8696a0">Opened</div>';
+          }
+        }
+      }).catch(function(){});
+    }
+  }
+
+  var fileHtml='';
+  // VO_ICON must be defined BEFORE fileHtml block uses it
+  var VO_ICON = '<svg width="15" height="15" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="rgba(255,255,255,0.7)" stroke-width="2.2"/><line x1="13" y1="7.5" x2="13" y2="13" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="13" x2="16.5" y2="15.5" stroke="rgba(255,255,255,0.7)" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="5" r="4" fill="white"/><text x="22" y="8" text-anchor="middle" font-size="6" fill="#111" font-weight="900" font-family="Arial">1</text></svg>';
+  if(m.fileUrl){
+    var _ft = m.fileType || getMimeFromName(m.fileName||m.fileUrl||'');
+    if(_ft === 'image/sticker') {
+      // Tappable sticker — opens save sheet
+      fileHtml=(typeof buildStickerHtml==='function')?buildStickerHtml(m.fileUrl,m.id,m.sender||'Anonymous',isMine,150):
+        '<div style="display:inline-block;margin:4px 0;position:relative"><img src="'+m.fileUrl+'" data-orig="'+m.fileUrl+'" style="width:150px;height:150px;object-fit:contain;display:block;filter:drop-shadow(0 4px 12px rgba(0,0,0,.5));border-radius:4px" loading="eager" onload="if(typeof _preCacheImg===\'function\')_preCacheImg(this.getAttribute(\'data-orig\')||this.src)" onerror="if(typeof _stkImgErr===\'function\')_stkImgErr(this)"></div>';
+    } else if(_ft === 'image/gif' || (m.fileUrl && m.fileUrl.includes('giphy.com'))) {
+      // WhatsApp GIF: photo-style rounded bubble with GIF badge
+      fileHtml='<div style="position:relative;display:inline-block;border-radius:14px;overflow:hidden;margin-top:4px;max-width:220px">' +
+        '<img src="'+m.fileUrl+'" data-orig="'+m.fileUrl+'" style="width:220px;max-width:100%;max-height:180px;object-fit:cover;display:block;cursor:pointer" onclick="window.open(\''+m.fileUrl+'\',\'_blank\')" loading="lazy" onload="if(typeof _preCacheImg===\'function\')_preCacheImg(this.getAttribute(\'data-orig\')||this.src)" onerror="if(typeof _stkImgErr===\'function\')_stkImgErr(this)">' +
+        '<div style="position:absolute;top:5px;left:5px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;font-weight:900;padding:2px 6px;border-radius:5px;letter-spacing:.5px">GIF</div>' +
+        '</div>';
+    } else if(_ft.startsWith('image/')) {
+      if (isVO && !isMine && !voOpened) {
+        fileHtml='<div onclick="_fjVORevealFile(\''+m.id+'\',\''+esc(m.fileUrl)+'\')" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border-radius:12px;padding:9px 11px;cursor:pointer;-webkit-tap-highlight-color:transparent;margin-top:4px">'+
+          '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+VO_ICON+'</div>'+
+          '<div><div style="font-size:13px;font-weight:700;color:#e9edef">View once photo</div><div style="font-size:11px;color:#8696a0">Tap to view — disappears after</div></div></div>';
+      } else if (isVO && isMine) {
+        fileHtml='<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:rgba(255,255,255,.07);border-radius:12px;min-width:180px">'+
+          '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5" fill="white"/><polyline points="21 15 16 10 5 21" stroke="white" stroke-width="2"/></svg>'+
+          '</div>'+
+          '<div><div style="font-size:13px;font-weight:700;color:#e9edef">View once photo</div><div style="font-size:11px;color:#8696a0">Sent · view once</div></div>'+VO_ICON+'</div>';
+      } else if (isVO && voOpened) {
+        fileHtml='<div style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:12px;color:#8696a0">'+VO_ICON+' Opened</div>';
+      } else {
+        // Register callbacks so image viewer 3-dot Delete/Reply/React/Forward work
+        if (!window._vpCbs) window._vpCbs = {};
+        (function(_mid, _im, _snd) {
+          window._vpCbs[_mid] = {
+            onDelete: function() { if(_im){ var el=document.getElementById('m_'+_mid); if(el){el.style.opacity='0';setTimeout(function(){el.remove();db.ref('fun_chat/'+_mid).remove();},300);} } },
+            onReply: function() { if(typeof fjSetReply==='function') fjSetReply(_mid, _snd, '', m.fileUrl||null, m.fileType||null, false); },
+            onReact: function(em) { db.ref('fun_chat/'+_mid+'/reactions/'+_anonId).set(em); },
+            onForward: function() { if(typeof showForwardPicker==='function') showForwardPicker('', _mid, m.fileUrl||null, m.fileType||null); }
+          };
+        })(m.id, isMine, m.sender||'Anonymous');
+        fileHtml=(typeof buildImageHtml==='function')?buildImageHtml(m.fileUrl,'200px','200px',m.id,isMine):'<img src="'+m.fileUrl+'" style="max-width:200px;border-radius:10px;margin-top:4px;cursor:pointer;display:block" onclick="openGeminiImgAnalysis(\''+m.fileUrl+'\')" loading="lazy">';
+      }
+    }
+    else if(_ft.startsWith('audio/'))
+      fileHtml=(typeof buildWaVoiceBubble==='function')?buildWaVoiceBubble(m.fileUrl,m.id):
+        '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-top:4px;min-width:220px;cursor:pointer" onclick="_waPlayVoice(this)" data-vnurl="'+m.fileUrl+'" data-vnid="'+m.id+'">'+
+        '<button style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>'+
+        '</button>'+
+        '<div style="flex:1;display:flex;flex-direction:column;gap:5px">'+
+          '<div style="display:flex;align-items:center;gap:1.5px;height:28px">'+[3,5,8,10,14,9,12,7,10,13,8,5,11,9,6,13,8,11,5,7].map(function(h,i){return '<div data-bi="'+i+'" style="width:2.5px;height:'+h+'px;background:rgba(255,255,255,.45);border-radius:2px"></div>';}).join('')+'</div>'+
+          '<div style="display:flex;align-items:center;gap:6px"><span class="_vnTime" style="font-size:11px;color:rgba(255,255,255,.55)">0:00</span>'+
+          '<div style="flex:1;height:3px;background:rgba(255,255,255,.2);border-radius:2px;position:relative" ontouchstart="_vnScrubStart(event,this)" ontouchmove="_vnScrubMove(event,this)" ontouchend="_vnScrubEnd(event,this)">'+
+            '<div class="_vnProg" style="height:100%;width:0%;background:#ec4899;border-radius:2px;pointer-events:none"></div>'+
+            '<div class="_vnThumb" style="position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.4);pointer-events:none;display:none"></div>'+
+          '</div></div>'+
+        '</div>'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="2.2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>'+
+      '</div>';
+    else if(_ft.startsWith('video/')){
+      if(isVO && m.fileUrl){
+        // View-once video
+        if(isMine){
+          fileHtml='<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:rgba(255,255,255,.07);border-radius:12px;min-width:180px">'+
+            '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>'+
+            '</div>'+
+            '<div><div style="font-size:13px;font-weight:700;color:#e9edef">View once video</div><div style="font-size:11px;color:#8696a0">Sent</div></div>'+
+            VO_ICON+
+          '</div>';
+        } else if(voOpened){
+          fileHtml='<div style="display:flex;align-items:center;gap:8px;padding:9px 11px;background:rgba(255,255,255,.07);border-radius:12px;min-width:180px">'+
+            '<div style="width:36px;height:36px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'+
+            '</div>'+
+            '<div><div style="font-size:13px;font-weight:700;color:#8696a0">View once video</div><div style="font-size:11px;color:#8696a0;font-style:italic">Opened</div></div>'+
+          '</div>';
+        } else {
+          // Not yet opened — show blurred preview thumbnail + tap to reveal
+          fileHtml='<div data-vovid="'+m.id+'" data-vovurl="'+esc(m.fileUrl)+'" onclick="_fjVOVideoReveal(this.dataset.vovid,this.dataset.vovurl)" style="position:relative;width:220px;height:155px;border-radius:12px;overflow:hidden;cursor:pointer;background:#000;margin-top:4px">'+
+            '<video id="_vov_'+m.id+'" src="'+m.fileUrl+'" muted playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;filter:blur(12px);display:block;pointer-events:none" onloadedmetadata="this.currentTime=0.5"></video>'+
+            '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(0,0,0,.35)">'+
+              '<div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.5)">'+
+                '<svg width="22" height="22" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="white" stroke-width="2.2"/><line x1="13" y1="7.5" x2="13" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="13" x2="16.5" y2="15.5" stroke="white" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="5" r="4" fill="white"/><text x="22" y="8" text-anchor="middle" font-size="6" fill="#9333ea" font-weight="900" font-family="Arial">1</text></svg>'+
+              '</div>'+
+              '<div style="text-align:center"><div style="font-size:13px;font-weight:700;color:#fff">View once video</div><div style="font-size:11px;color:rgba(255,255,255,.75)">Tap to play · disappears after</div></div>'+
+            '</div>'+
+          '</div>';
+        }
+      } else {
+        if(!window._vpCbs) window._vpCbs={};
+        window._vpCbs[m.id]={
+          onDelete:function(){ if(isMine){ var el=document.getElementById('m_'+m.id); if(el){el.style.opacity='0';setTimeout(function(){el.remove();db.ref('fun_chat/'+m.id).remove();},300);} } },
+          onReply:function(){ fjSetReply(m.id,m.sender||'Anonymous',m.text||'',m.fileUrl||null,m.fileType||null,false); },
+          onReact:function(em){ db.ref('fun_chat/'+m.id+'/reactions/'+_anonId).set(em); },
+          onForward:function(){ if(typeof showForwardPicker==='function') showForwardPicker('',m.id,m.fileUrl||null,m.fileType||null); }
+        };
+        fileHtml=(typeof buildInlineVideoHtml==='function')?buildInlineVideoHtml(m.fileUrl,m.id,m.sender||'Anonymous',m.ts,isMine):'<video controls src="'+m.fileUrl+'" style="max-width:200px;max-height:200px;border-radius:8px;margin-top:4px;display:block" preload="none"></video>';
+      }
+    }
+    else {
+      var _ext = (m.fileName||m.fileUrl||'').split('.').pop().toLowerCase();
+      var _ico = {pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',ppt:'📋',pptx:'📋',zip:'🗜️',apk:'📦',aia:'📦',txt:'📃'}[_ext]||'📎';
+      var _lbl = m.fileName || 'Download file';
+      fileHtml='<a href="'+m.fileUrl+'" target="_blank" download style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border-radius:12px;padding:10px 14px;margin-top:6px;text-decoration:none;color:#fff">'+
+        '<span style="font-size:28px">'+_ico+'</span>'+
+        '<div style="min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">'+_lbl+'</div>'+
+        '<div style="font-size:11px;color:#9ca3af">Tap to download</div></div></a>';
+    }
+  }
+
+  // View-once text bubble
+  var textHtml = '';
+  if(isVO && m.text && !m.fileUrl){
+    if(isMine){
+      textHtml='<div style="display:flex;align-items:center;gap:7px;padding:1px 0">'+VO_ICON+'<span style="font-size:13px;color:rgba(255,255,255,.7);font-style:italic">View once</span></div>';
+    } else if(voOpened){
+      textHtml='<div style="font-size:12px;color:#8696a0;display:flex;align-items:center;gap:5px">'+VO_ICON+' Opened</div>';
+    } else {
+      textHtml='<div onclick="_fjVOReveal(\''+m.id+'\',\''+esc(m.text)+'\')" style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border-radius:12px;padding:9px 11px;cursor:pointer;-webkit-tap-highlight-color:transparent">'+
+        '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#9333ea,#ec4899);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+          '<svg width="18" height="18" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10" stroke="white" stroke-width="2.2"/><line x1="13" y1="7.5" x2="13" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="13" y1="13" x2="16.5" y2="15.5" stroke="white" stroke-width="2" stroke-linecap="round"/><circle cx="22" cy="5" r="4" fill="white"/><text x="22" y="8" text-anchor="middle" font-size="6" fill="#9333ea" font-weight="900" font-family="Arial">1</text></svg>'+
+        '</div>'+
+        '<div><div style="font-size:13px;font-weight:700;color:#e9edef">View once message</div><div style="font-size:11px;color:#8696a0">Tap to read — disappears after</div></div>'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8696a0" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>'+
+      '</div>';
+    }
+  } else {
+    // Check if text is special content from attach menu → use buildSpecialCard
+    var _rawTxt = m.text || '';
+    var _isSpecial = /^(📊 \*Poll:\*|📍 Location:|👤 \*Contact:\*|👥 \*Contacts|📅 \*Event:\*)/.test(_rawTxt);
+    if (_isSpecial && typeof buildSpecialCard === 'function') {
+      textHtml = buildSpecialCard(_rawTxt, m.id);
+    } else {
+      textHtml = '<span class="_msgtext" style="white-space:pre-wrap">'+esc(m.text||'')+'</span>';
+    }
+  }
+  // View-once tick icon next to timestamp
+  var voTick = isVO ? VO_ICON : '';
+
+  var rHtml = '';
+  if (m.replyTo && (m.replyTo.text || m.replyTo.fileUrl || m.replyTo.fileType)) {
+    var _replyThumb = '';
+    // NEVER show thumbnail for view-once — that would bypass the protection
+    if (!m.replyTo.viewOnce && m.replyTo.fileUrl && m.replyTo.fileType) {
+      var _rft = m.replyTo.fileType;
+      if (_rft === 'image/sticker') {
+        _replyThumb = '<img src="'+m.replyTo.fileUrl+'" style="width:42px;height:42px;object-fit:contain;border-radius:6px;flex-shrink:0;background:rgba(255,255,255,.05)" onerror="this.style.display=\'none\'">';
+      } else if (_rft === 'image/gif' || (m.replyTo.fileUrl && m.replyTo.fileUrl.includes('giphy.com'))) {
+        _replyThumb = '<div style="width:42px;height:42px;border-radius:6px;overflow:hidden;flex-shrink:0;position:relative"><img src="'+m.replyTo.fileUrl+'" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'"><span style="position:absolute;bottom:1px;left:2px;font-size:8px;font-weight:900;color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 3px">GIF</span></div>';
+      } else if (_rft.startsWith('image/')) {
+        _replyThumb = '<img src="'+m.replyTo.fileUrl+'" style="width:42px;height:42px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'">';
+      } else if (_rft.startsWith('video/')) {
+        _replyThumb = '<div style="width:42px;height:42px;border-radius:6px;background:#1a1a2e;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px">▶️</div>';
+      }
+    }
+    var _replyLabel = m.replyTo.viewOnce ? '🔒 View once message' :
+                     (m.replyTo.fileType === 'image/sticker' ? '🎭 Sticker' :
+                     (m.replyTo.fileType === 'image/gif' ? '🎞 GIF' :
+                     (m.replyTo.fileType && m.replyTo.fileType.startsWith('image/') ? '📷 Photo' :
+                     (m.replyTo.fileType && m.replyTo.fileType.startsWith('audio/') ? '🎙 Voice note' :
+                     esc((m.replyTo.text||'').substring(0,80))))));
+    rHtml = '<div class="reply-strip" onclick="fjScrollToMsg(\''+m.replyTo.id+'\')">'+
+      '<div style="flex:1;min-width:0">'+
+        '<div class="rs-name">'+esc(m.replyTo.sender||'?')+'</div>'+
+        '<div class="rs-text">'+_replyLabel+'</div>'+
+      '</div>'+_replyThumb+
+    '</div>';
+  }
+  var _fjFwdHtml = m.forwarded ?
+    '<div style="display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.5);font-size:11px;font-style:italic;margin-bottom:3px">'+
+    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="2.5" stroke-linecap="round"><polyline points="15 17 20 12 15 7"/><polyline points="9 17 14 12 9 7"/></svg>Forwarded</div>' : '';
+  var senderHtml = (!isMine && !m.fileUrl) ? '<div class="bsender">'+(m.isBot?'🤖 Fun Bot':'Anonymous #'+String(m.sessionId||'?').slice(-3))+'</div>' : '';
+  // Suppress auto-generated filename text (📎 filename.ext) when a file is present
+  if (m.fileUrl && m.text && m.text.startsWith('📎 ')) {
+    textHtml = '';
+  }
+  var tickHtml = isMine ? '<svg class="btick" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4M5 12l2 2 4-4" stroke="#53bdeb" stroke-width="2" fill="none" stroke-linecap="round"/></svg>' : '';
+  var bubClass = 'bubble '+(isMine?'mine':(m.isBot?'theirs bot':'theirs'));
+  // Detect attach-menu content → black box bubble
+  var _txt = m.text || '';
+  var _isAttach = m.fileUrl || /^(📍 Location:|👤 \*Contact:\*|👥 \*Contacts|📅 \*Event:\*|📊 \*Poll:\*)/.test(_txt);
+  var _isPoll = /^📊 \*Poll:\*/.test(_txt);
+  if (_isAttach) { bubClass += ' attach-blk'; if (_isPoll) bubClass += ' attach-poll'; }
+  var avatarBg = m.isBot?'background:linear-gradient(135deg,#f59e0b,#d97706)':'background:linear-gradient(135deg,#8b5cf6,#ec4899)';
+  var avatarTxt = m.isBot?'🤖':'😈';
+  var myPhoto = (window.currentUserData&&window.currentUserData.photoURL)||null;
+  var myAv = myPhoto
+    ? '<div class="avatar" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);overflow:hidden"><img src="'+myPhoto+'" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.textContent=\'😎\'"></div>'
+    : '<div class="avatar" style="background:linear-gradient(135deg,#ec4899,#8b5cf6)">😎</div>';
+
+  // WhatsApp sticker: no bubble background — floating image with naked timestamp
+  var _isStickerMsg = (m.fileType === 'image/sticker');
+  if (_isStickerMsg) {
+    wrap.innerHTML =
+      (!isMine ? '<div class="avatar" style="'+avatarBg+'">'+avatarTxt+'</div>' : '')+
+      '<div class="bcont">'+
+        '<div style="display:inline-block">'+
+          (senderHtml)+
+          fileHtml+
+          '<div style="display:flex;justify-content:'+(isMine?'flex-end':'flex-start')+';padding:3px 2px 0">'+
+            '<span style="font-size:11px;color:#8696a0">'+fmt12(m.ts)+'</span>'+
+            (isMine?'<span style="margin-left:3px">'+tickHtml+'</span>':'')+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      (isMine ? myAv : '');
+  } else {
+    var _initReactHtml = m.reactions ? _fjBuildReactHtml(m.reactions, m.id) : '';
+    wrap.innerHTML =
+      (!isMine ? '<div class="avatar" style="'+avatarBg+'">'+avatarTxt+'</div>' : '')+
+      '<div class="bcont">'+
+        '<div class="'+bubClass+'">'+
+          senderHtml+
+          _fjFwdHtml+rHtml+
+          textHtml+
+          fileHtml+
+          '<div class="bmeta"><span class="btime">'+fmt12(m.ts)+'</span>'+voTick+tickHtml+'</div>'+
+        '</div>'+
+        (_initReactHtml ? '<div class="_fjReactBar" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;padding:0 2px">'+_initReactHtml+'</div>' : '<div class="_fjReactBar" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;padding:0 2px"></div>')+
+      '</div>'+
+      (isMine ? myAv : '');
+  }
+  // Live-update reactions via Firebase child_changed
+  db.ref('fun_chat/'+m.id+'/reactions').on('value', function(rSnap) {
+    var el = document.getElementById('m_'+m.id);
+    if (!el) return;
+    var bar = el.querySelector('._fjReactBar');
+    if (!bar) return;
+    var rData = rSnap.val();
+    bar.innerHTML = rData ? _fjBuildReactHtml(rData, m.id) : '';
+  });
+  // Tap = context popup, Long press = select mode (_lpAt timestamp — no co-joining)
+  (function(msgId, isMineRef) {
+    var _lp = null, _lpAt = 0, _moved = false, _sx = 0, _sy = 0, _st = 0;
+    wrap.addEventListener('touchstart', function(e) {
+      _moved = false; _lpAt = 0; _st = Date.now();
+      _sx = e.touches[0].clientX; _sy = e.touches[0].clientY;
+      // Fix 3: block contextmenu immediately so it can't appear before selection mode
+      if (typeof _lpBlockCtx !== 'undefined') _lpBlockCtx = Date.now() + 800;
+      _lp = setTimeout(function() {
+        _lpAt = Date.now();
+        if (typeof _lpBlockCtx !== 'undefined') _lpBlockCtx = Date.now() + 1200;
+        if (typeof enterSelectMode === 'function') enterSelectMode(msgId);
+      }, 480);
+    }, { passive: true });
+    wrap.addEventListener('touchmove', function(e) {
+      if (Math.abs(e.touches[0].clientX - _sx) > 8 || Math.abs(e.touches[0].clientY - _sy) > 8) {
+        _moved = true; clearTimeout(_lp);
+      }
+    }, { passive: true });
+    wrap.addEventListener('touchend', function(e) {
+      clearTimeout(_lp);
+      if (_lpAt > 0 && (Date.now() - _lpAt) < 900) { e.preventDefault(); e.stopPropagation(); return; }
+      // Clear contextmenu block when finger lifts without triggering long-press
+      if (_lpAt === 0 && typeof _lpBlockCtx !== 'undefined') _lpBlockCtx = 0;
+      if (_moved) return;
+      var dur = Date.now() - _st;
+      if (dur < 600 && _lpAt === 0) {
+        var _rt = e.target;
+        // Let reply strips, avatars, and reaction pills handle their own events
+        var _skip = _rt && (_rt.closest ? (
+          _rt.closest('.reply-strip') ||
+          _rt.closest('._replyPreview') ||
+          _rt.closest('.avatar') ||
+          _rt.closest('._fjReactBar')
+        ) : false);
+        if (_skip) return;
+        if (typeof _selectMode !== 'undefined' && _selectMode) {
+          // Selection mode: block ALL child element interactions so videos/images don't open
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof toggleSelectMsg === 'function') toggleSelectMsg(msgId);
+        } else {
+          // Walk up from tap target: if any ancestor inside this bubble has
+          // onclick / is a button / is a link → let it handle its own tap.
+          // This covers: images, GIFs, stickers, polls, contacts, view-once,
+          // voice notes, videos — anything that is NOT plain text.
+          var _node = _rt;
+          var _isInteractive = false;
+          while (_node && _node !== wrap) {
+            if (_node.tagName === 'BUTTON' || _node.tagName === 'A') { _isInteractive = true; break; }
+            if (_node.hasAttribute && _node.hasAttribute('onclick')) { _isInteractive = true; break; }
+            _node = _node.parentElement;
+          }
+          if (_isInteractive) return; // let the element's own onclick fire
+          // Plain text bubble — show reaction/context menu on tap
+          e.preventDefault();
+          showCtx(e, msgId, isMineRef);
+        }
+      }
+    }, { passive: false });
+    wrap.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      // Block contextmenu during and after long-press window
+      if (typeof _lpBlockCtx !== 'undefined' && Date.now() < _lpBlockCtx) return;
+      if (typeof _selectMode === 'undefined' || !_selectMode) showCtx(e, msgId, isMineRef);
+    });
+  })(m.id, isMine);
+  c.appendChild(wrap);
+  fjInitSwipe(wrap, m.id, m.sender||'Anonymous', m.text||'', m.fileUrl||null, m.fileType||null, !!m.viewOnce);
+  // Smart scroll: scroll if already at bottom, else show scroll button
+  fjSmartScroll();
+}
+// ── Media / Links / Docs viewer for funjokes ─────────────────────────────────
+function showFjMedia() {
+  var d = document.createElement('div');
+  d.id = '_fjUI1';
+  d.style.cssText = 'position:fixed;inset:0;z-index:9900;background:#0d1117;display:flex;flex-direction:column';
+  d.innerHTML =
+    '<div style="background:#1a1f2e;border-bottom:1px solid #2a3942;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0">' +
+      '<button onclick="document.getElementById(\'_fjUI1\') && document.getElementById(\'_fjUI1\').remove()" style="width:40px;height:40px;background:#2a3942;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e9edef" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>' +
+      '<span style="color:#fff;font-weight:700;font-size:16px">Media, Links &amp; Docs</span>' +
+    '</div>' +
+    '<div style="display:flex;border-bottom:1px solid #2a3942;flex-shrink:0">' +
+      '<button id="fjTabMedia" onclick="fjSwitchTab(\'media\')" style="flex:1;background:none;border:none;border-bottom:2px solid #ec4899;padding:12px;color:#ec4899;font-weight:700;font-size:13px;cursor:pointer">Media</button>' +
+      '<button id="fjTabLinks" onclick="fjSwitchTab(\'links\')" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:12px;color:#6b7280;font-size:13px;cursor:pointer">Links</button>' +
+      '<button id="fjTabDocs"  onclick="fjSwitchTab(\'docs\')"  style="flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:12px;color:#6b7280;font-size:13px;cursor:pointer">Docs</button>' +
+    '</div>' +
+    '<div id="fjTabContent" style="flex:1;overflow-y:auto;padding:12px"></div>';
+  document.body.appendChild(d);
+
+  window.fjSwitchTab = function(tab) {
+    ['media','links','docs'].forEach(function(t) {
+      var b = document.getElementById('fjTab'+t.charAt(0).toUpperCase()+t.slice(1));
+      if (b) { b.style.borderBottomColor=t===tab?'#ec4899':'transparent'; b.style.color=t===tab?'#ec4899':'#6b7280'; b.style.fontWeight=t===tab?'700':'400'; }
+    });
+    var c = document.getElementById('fjTabContent'); if (!c) return;
+    c.innerHTML = '<div style="text-align:center;padding:24px;color:#6b7280">Loading...</div>';
+    db.ref('fun_chat').limitToLast(300).once('value').then(function(snap) {
+      var msgs = []; snap.forEach(function(s){ msgs.push(s.val()); });
+      if (tab === 'media') {
+        var items = msgs.filter(function(m){ return m.fileUrl && m.fileType && (m.fileType.startsWith('image/')||m.fileType.startsWith('video/')); });
+        if (!items.length) { c.innerHTML='<div style="text-align:center;padding:30px;color:#6b7280">No media yet</div>'; return; }
+        c.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px">' +
+          items.reverse().map(function(m) {
+            return m.fileType.startsWith('image/') ?
+              '<div style="aspect-ratio:1;overflow:hidden;cursor:pointer" onclick="window.open(\''+m.fileUrl+'\',\'_blank\')"><img src="'+m.fileUrl+'" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>' :
+              '<div style="aspect-ratio:1;background:#1f2937;display:flex;align-items:center;justify-content:center;font-size:32px;cursor:pointer" onclick="window.open(\''+m.fileUrl+'\',\'_blank\')">&#9654;</div>';
+          }).join('') + '</div>';
+      } else if (tab === 'links') {
+        var urlRe = /(https?:\/\/[^\s]+)/g; var links = [];
+        msgs.forEach(function(m){ var t=m.text||''; var x; while((x=urlRe.exec(t))!==null) links.push(x[1]); });
+        if (!links.length) { c.innerHTML='<div style="text-align:center;padding:30px;color:#6b7280">No links yet</div>'; return; }
+        c.innerHTML = links.reverse().map(function(l){
+          return '<a href="'+l+'" target="_blank" style="display:block;background:#1a1f2e;border-radius:14px;padding:12px 14px;margin-bottom:8px;text-decoration:none"><p style="color:#60a5fa;font-size:13px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+l+'</p></a>';
+        }).join('');
+      } else {
+        var icons = {pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',txt:'📃'};
+        var docs = msgs.filter(function(m){ return m.fileUrl && m.fileType && !m.fileType.startsWith('image/') && !m.fileType.startsWith('video/') && !m.fileType.startsWith('audio/'); });
+        if (!docs.length) { c.innerHTML='<div style="text-align:center;padding:30px;color:#6b7280">No docs yet</div>'; return; }
+        c.innerHTML = docs.reverse().map(function(m){
+          var ext = (m.fileName||'').split('.').pop().toLowerCase();
+          return '<a href="'+m.fileUrl+'" target="_blank" download style="display:flex;align-items:center;gap:12px;background:#1a1f2e;border-radius:14px;padding:12px 14px;margin-bottom:8px;text-decoration:none"><span style="font-size:26px">'+(icons[ext]||'📎')+'</span><div><p style="color:#e9edef;font-size:13px;font-weight:600;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">'+(m.fileName||'Document')+'</p><p style="color:#6b7280;font-size:11px;margin:2px 0 0">Tap to open</p></div></a>';
+        }).join('');
+      }
+    });
+  };
+  fjSwitchTab('media');
+}
+
+// ── Reply ─────────────────────────────────────────────────────────────
+var _fjReplyTo = null;
+function fjSetReply(id, sender, text, fileUrl, fileType, viewOnce) {
+  _fjReplyTo = {id:id, sender:sender, text:text, fileUrl:fileUrl||null, fileType:fileType||null, viewOnce:!!viewOnce};
+  document.getElementById('fjReplyToName').textContent = sender;
+  var _preview = viewOnce ? '🔒 View once message' :
+                 (fileType==='image/sticker'?'🎭 Sticker':
+                 (fileType==='image/gif'?'🎞 GIF':
+                 (fileType&&fileType.startsWith('image/')?'📷 Photo':
+                 (fileType&&fileType.startsWith('audio/')?'🎙 Voice note':
+                 (text||'')))));
+  document.getElementById('fjReplyToText').textContent = _preview;
+  document.getElementById('fjReplyBar').style.display = 'block';
+  var inp = document.getElementById('msgInp'); if(inp) inp.focus();
+}
+function fjClearReply() {
+  _fjReplyTo = null;
+  document.getElementById('fjReplyBar').style.display = 'none';
+}
+
+// ── Media / Links / Docs viewer for Fun Jokes ─────────────────────────────────
+function showFjMedia() {
+  var d = document.createElement('div');
+  d.id = '_fjUI2';
+  d.style.cssText = 'position:fixed;inset:0;z-index:9900;background:#0d1117;display:flex;flex-direction:column';
+  d.innerHTML =
+    '<div style="background:#1a1f2e;border-bottom:1px solid #2a3942;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0">' +
+      '<button onclick="document.getElementById(\'_fjUI2\') && document.getElementById(\'_fjUI2\').remove()" style="width:40px;height:40px;background:#2a3942;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e9edef" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>' +
+      '<span style="color:#fff;font-weight:700;font-size:16px">Media, Links & Docs</span>' +
+    '</div>' +
+    '<div style="display:flex;border-bottom:1px solid #2a3942;flex-shrink:0">' +
+      '<button id="fjTabMedia" onclick="fjSwitchTab(\'media\')" style="flex:1;background:none;border:none;border-bottom:2px solid #ec4899;padding:12px;color:#ec4899;font-weight:700;font-size:13px;cursor:pointer">Media</button>' +
+      '<button id="fjTabLinks" onclick="fjSwitchTab(\'links\')" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:12px;color:#6b7280;font-size:13px;cursor:pointer">Links</button>' +
+      '<button id="fjTabDocs"  onclick="fjSwitchTab(\'docs\')"  style="flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:12px;color:#6b7280;font-size:13px;cursor:pointer">Docs</button>' +
+    '</div>' +
+    '<div id="fjTabContent" style="flex:1;overflow-y:auto;padding:12px"></div>';
+  document.body.appendChild(d);
+
+  window.fjSwitchTab = function(tab) {
+    ['media','links','docs'].forEach(function(t) {
+      var btn = document.getElementById('fjTab' + t.charAt(0).toUpperCase() + t.slice(1));
+      if (btn) { btn.style.borderBottomColor = t===tab?'#ec4899':'transparent'; btn.style.color = t===tab?'#ec4899':'#6b7280'; btn.style.fontWeight = t===tab?'700':'400'; }
+    });
+    var c = document.getElementById('fjTabContent'); if (!c) return;
+    c.innerHTML = '<div style="text-align:center;padding:24px;color:#6b7280">Loading...</div>';
+    db.ref('fun_chat').limitToLast(200).once('value').then(function(snap) {
+      var msgs = []; snap.forEach(function(s){ msgs.push(s.val()); });
+      if (tab === 'media') {
+        var items = msgs.filter(function(m){ return m.fileUrl && m.fileType && (m.fileType.startsWith('image/')||m.fileType.startsWith('video/')); });
+        if (!items.length) { c.innerHTML='<div style="text-align:center;padding:30px;color:#6b7280">No media shared yet</div>'; return; }
+        c.innerHTML = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px">' +
+          items.reverse().map(function(m){ return m.fileType.startsWith('image/') ?
+            '<div style="aspect-ratio:1;overflow:hidden;cursor:pointer" onclick="window.open(\''+m.fileUrl+'\',\'_blank\')"><img src="'+m.fileUrl+'" style="width:100%;height:100%;object-fit:cover" loading="lazy"></div>' :
+            '<div style="aspect-ratio:1;background:#1f2937;display:flex;align-items:center;justify-content:center;font-size:32px;cursor:pointer" onclick="window.open(\''+m.fileUrl+'\',\'_blank\')">&#9654;</div>';
+          }).join('') + '</div>';
+      } else if (tab === 'links') {
+        var urlRe = /(https?:\/\/[^\s]+)/g; var links = [];
+        msgs.forEach(function(m){ var t=m.text||''; var x; while((x=urlRe.exec(t))!==null) links.push(x[1]); });
+        if (!links.length) { c.innerHTML='<div style="text-align:center;padding:30px;color:#6b7280">No links shared yet</div>'; return; }
+        c.innerHTML = links.reverse().map(function(l){ return '<a href="'+l+'" target="_blank" style="display:block;background:#1a1f2e;border-radius:14px;padding:12px 14px;margin-bottom:8px;text-decoration:none"><p style="color:#60a5fa;font-size:13px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+l+'</p></a>'; }).join('');
+      } else {
+        var icons = {pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',txt:'📃'};
+        var docs = msgs.filter(function(m){ return m.fileUrl && m.fileType && !m.fileType.startsWith('image/') && !m.fileType.startsWith('video/') && !m.fileType.startsWith('audio/'); });
+        if (!docs.length) { c.innerHTML='<div style="text-align:center;padding:30px;color:#6b7280">No docs shared yet</div>'; return; }
+        c.innerHTML = docs.reverse().map(function(m){ var ext=(m.fileName||'').split('.').pop().toLowerCase(); return '<a href="'+m.fileUrl+'" target="_blank" download style="display:flex;align-items:center;gap:12px;background:#1a1f2e;border-radius:14px;padding:12px 14px;margin-bottom:8px;text-decoration:none"><span style="font-size:26px">'+(icons[ext]||'📎')+'</span><div><p style="color:#e9edef;font-size:13px;font-weight:600;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px">'+(m.fileName||'Document')+'</p><p style="color:#6b7280;font-size:11px;margin:2px 0 0">Tap to open</p></div></a>'; }).join('');
+      }
+    });
+  };
+  fjSwitchTab('media');
+}
+
+// ── Swipe to reply (WhatsApp style, 130px threshold) ──────────────────
+function fjInitSwipe(wrap, id, sender, text, fileUrl, fileType, viewOnce) {
+  var startX=0, startY=0, dx=0, swiped=false;
+  var el = wrap.querySelector('.bcont');
+  if (!el) return;
+  wrap.addEventListener('touchstart',function(e){
+    startX=e.touches[0].clientX; startY=e.touches[0].clientY; dx=0; swiped=false;
+  },{passive:true});
+  wrap.addEventListener('touchmove',function(e){
+    var dy=Math.abs(e.touches[0].clientY-startY);
+    dx=e.touches[0].clientX-startX;
+    if(dy>20){dx=0;return;}
+    if(dx>0&&dx<120){el.style.transform='translateX('+dx+'px)';el.style.transition='none';}
+  },{passive:true});
+  wrap.addEventListener('touchend',function(){
+    el.style.transition='transform .2s ease'; el.style.transform='';
+    if(dx>130&&!swiped){swiped=true;if(navigator.vibrate)navigator.vibrate(30);fjSetReply(id,sender,text,fileUrl,fileType,viewOnce);}
+  });
+}
+var _fjUnreadCount = 0;
+var _fjAtBottom = true;
+
+function _fjIsAtBottom() {
+  var c = document.getElementById('msgs');
+  return !c || (c.scrollHeight - c.scrollTop - c.clientHeight < 80);
+}
+function fjUpdateScrollBtn() {
+  var btn = document.getElementById('fjScrollBtn');
+  var badge = document.getElementById('fjUnreadBadge');
+  if (!btn) return;
+  if (_fjAtBottom) {
+    btn.style.display = 'none';
+    _fjUnreadCount = 0;
+    if (badge) badge.style.display = 'none';
+  } else {
+    btn.style.display = 'flex';
+    if (_fjUnreadCount > 0 && badge) {
+      badge.textContent = _fjUnreadCount > 99 ? '99+' : _fjUnreadCount;
+      badge.style.display = 'flex';
+    } else if (badge) { badge.style.display = 'none'; }
+  }
+}
+function fjScrollToMsg(id) {
+  var el = document.getElementById('m_'+id);
+  if (!el) return;
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  if (typeof _highlightMsg === 'function') {
+    _highlightMsg(el);
+  } else {
+    el.style.transition='none';
+    el.style.background='linear-gradient(135deg,rgba(147,51,234,.30),rgba(236,72,153,.18))';
+    el.style.borderRadius='14px';
+    void el.offsetWidth;
+    el.style.transition='background 0.8s ease';
+    setTimeout(function(){ el.style.background=''; el.style.borderRadius=''; setTimeout(function(){el.style.transition='';},900); },650);
+  }
+}
+function fjScrollToBottom() {
+  var c = document.getElementById('msgs');
+  if (c) c.scrollTop = c.scrollHeight;
+  _fjUnreadCount = 0; _fjAtBottom = true; fjUpdateScrollBtn();
+}
+function fjSmartScroll() {
+  if (_fjAtBottom) {
+    var c = document.getElementById('msgs');
+    if (c) c.scrollTop = c.scrollHeight;
+  } else {
+    _fjUnreadCount++;
+    fjUpdateScrollBtn();
+  }
+}
+// Attach scroll listener for msgs
+(function() {
+  function _attach() {
+    var c = document.getElementById('msgs');
+    if (!c) { setTimeout(_attach, 300); return; }
+    c.addEventListener('scroll', function() {
+      _fjAtBottom = _fjIsAtBottom();
+      if (_fjAtBottom) { _fjUnreadCount = 0; }
+      fjUpdateScrollBtn();
+    });
+    // Check state after messages load
+    setTimeout(function() {
+      _fjAtBottom = _fjIsAtBottom();
+      fjUpdateScrollBtn();
+    }, 1200);
+  }
+  _attach();
+})();
+
+// ── Context menu ────────────────────────────────────────────────────────
+function showCtx(e, id, isMine) {
+  if (typeof _lpBlockCtx !== 'undefined' && Date.now() < _lpBlockCtx) return;
+  if(_ctxEl){ _ctxEl.remove(); _ctxEl=null; }
+  var _cm=(window._fjMsgCache&&window._fjMsgCache[id])||{id:id,text:'',fileUrl:null,fileType:null,sender:'Anonymous',viewOnce:false};
+  var _cmText=_cm.text||'', _cmFileUrl=_cm.fileUrl||'', _cmFileType=_cm.fileType||'';
+
+  if (typeof showCtxSheet === 'function' && typeof _IC !== 'undefined') {
+    var acts = [];
+    acts.push({ic:_IC.reply,   lb:'Reply',   fn:function(){_fjCtxReply(id);}});
+    acts.push({ic:_IC.copy,    lb:'Copy',    fn:function(){cpMsg(id);}});
+    if (isMine) acts.push({ic:_IC.edit, lb:'Edit', fn:function(){editFunMsg(id,_cmText);}});
+    acts.push({ic:_IC.forward, lb:'Forward', fn:function(){if(typeof showForwardPicker==='function')showForwardPicker(_cmText,id,_cmFileUrl||null,_cmFileType||null);}});
+    acts.push({ic:_IC.star,    lb:_jStarred.has(id)?'Unstar':'Star', fn:function(){toggleJokeStar(id,_cmText);}});
+    acts.push({ic:_IC.pin,     lb:_jPinnedId===id?'Unpin':'Pin',     fn:function(){toggleJokePin(id,_cmText);}});
+    if (_cmFileUrl && _cmFileType.startsWith('image/') && _cmFileType!=='image/sticker' && _cmFileType!=='image/gif')
+      acts.push({ic:_IC.sticker, lb:'Create sticker', fn:function(){if(typeof openCreateStickerFromImage==='function')openCreateStickerFromImage(_cmFileUrl,id);}});
+    if (isMine) acts.push({ic:_IC.trash, lb:'Delete', danger:true, fn:function(){delMsg(id);}});
+    showCtxSheet({
+      posY: e ? (e.changedTouches && e.changedTouches.length ? e.changedTouches[0].clientY : (e.touches && e.touches.length ? e.touches[0].clientY : (e.clientY||null))) : null,
+      onEmoji:function(em){reactMsg(id,em);},
+      actions:acts
+    });
+    return;
+  }
+  // Legacy fallback
+  var m=document.createElement('div'); _ctxEl=m;
+  m.style.cssText='position:fixed;z-index:9997;background:#1f2c34;border:1px solid #2a3942;border-radius:16px;padding:6px;min-width:190px;box-shadow:0 8px 30px rgba(0,0,0,.6);left:100px;top:200px';
+  m.innerHTML='<button onclick="_fjCtxReply(\'' + id + '\')" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;cursor:pointer;color:#e5e7eb;font-size:14px">Reply</button>' +
+    (isMine?'<button onclick="delMsg(\'' + id + '\')" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;cursor:pointer;color:#f87171;font-size:14px">Delete</button>':'');
+  document.body.appendChild(m);
+  setTimeout(function(){
+    function rm(ev){if(_ctxEl&&!_ctxEl.contains(ev.target)){_ctxEl.remove();_ctxEl=null;document.removeEventListener('click',rm);}}
+    document.addEventListener('click',rm);
+  },350);
+}
+
+function cItem(ic,lb,ac,cl){
+  return '<button onclick="'+ac+'" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:none;border:none;cursor:pointer;border-radius:10px;color:'+cl+';font-size:14px;text-align:left" onmouseover="this.style.background=\'#2a3942\'" onmouseout="this.style.background=\'none\'"><span style="font-size:18px">'+ic+'</span>'+lb+'</button>';
+}
+function cpMsg(id){
+  if(_ctxEl){_ctxEl.remove();_ctxEl=null;}
+  var el=document.getElementById('m_'+id);
+  if(!el)return;
+  var sp=el.querySelector('span[style]');
+  navigator.clipboard.writeText(sp?sp.textContent:'').then(function(){showToast('Copied!');});
+}
+// Reply from context menu — uses full cached message data for proper thumbnail in reply bar
+window._fjCtxReply = function(id) {
+  if(_ctxEl){_ctxEl.remove();_ctxEl=null;}
+  var _cm=(window._fjMsgCache&&window._fjMsgCache[id]);
+  if(!_cm) return;
+  fjSetReply(_cm.id, _cm.sender, _cm.text, _cm.fileUrl, _cm.fileType, _cm.viewOnce);
+};
+function editFunMsg(msgId, currentText) {
+  if(_ctxEl){_ctxEl.remove();_ctxEl=null;}
+  // Delegate to the shared full-page edit UI from features.js
+  if (typeof editPubMsg === 'function') { editPubMsg(msgId, currentText); return; }
+  // Fallback — should not be reached if features.js loaded
+  if(typeof showToast==='function') showToast('Edit not available','error');
+}
+function cancelEditFun() {
+  if (typeof cancelEditPubMsg === 'function') cancelEditPubMsg();
+}
+function reactMsg(id,em){
+  if(_ctxEl){_ctxEl.remove();_ctxEl=null;}
+  // Use sessionId as key so we can remove (unreact) our own reaction
+  db.ref('fun_chat/'+id+'/reactions/'+_anonId).set(em);
+}
+function fjUnreact(id){
+  db.ref('fun_chat/'+id+'/reactions/'+_anonId).remove();
+}
+function _fjBuildReactHtml(reactions, msgId) {
+  if (!reactions) return '';
+  var counts = {};
+  Object.values(reactions).forEach(function(em){ if(typeof em==='string'&&em.trim()) counts[em]=(counts[em]||0)+1; });
+  var keys = Object.keys(counts); if(!keys.length) return '';
+  var myEm = reactions[_anonId] || null;
+  return keys.map(function(em){
+    var isMine = (myEm === em);
+    var fn = isMine ? 'fjUnreact(\''+msgId+'\')' : 'reactMsg(\''+msgId+'\',\''+em+'\')';
+    return '<span onclick="event.stopPropagation();'+fn+'" style="display:inline-flex;align-items:center;gap:3px;background:'+(isMine?'rgba(236,72,153,.25)':'rgba(255,255,255,.08)')+';border:1px solid '+(isMine?'#ec4899':'rgba(255,255,255,.15)')+';border-radius:20px;padding:3px 8px;font-size:13px;cursor:pointer;-webkit-tap-highlight-color:transparent">'+em+'<span style="font-size:11px;font-weight:600;color:#d1d5db">'+counts[em]+'</span></span>';
+  }).join('');
+}
+function delMsg(id){
+  if(_ctxEl){_ctxEl.remove();_ctxEl=null;}
+  if(!_myMsgIds.has(id)){showToast('Can only delete your own 🔒','error');return;}
+  var el=document.getElementById('m_'+id);
+  if(el){
+    el.style.transition='all .3s ease';el.style.opacity='0';el.style.transform='scale(.9)';
+    setTimeout(function(){el.remove();db.ref('fun_chat/'+id).remove();},300);
+  }
+}
+// ── Firebase ────────────────────────────────────────────────────────────
+db.ref('fun_chat').on('child_removed',function(snap){
+  var el=document.getElementById('m_'+snap.key);
+  if(el){el.style.transition='all .3s';el.style.opacity='0';setTimeout(function(){el.remove();},300);}
+});
+// Init Gemini for funjokes
+GeminiChat.init({
+  msgsContainerId: 'msgs',
+  msgInputId: 'msgInp',
+  getHistory: function(){ return window._fjChatHistory||[]; },
+  pushReply: function(text){
+    db.ref('fun_chat').push({
+      text:text, sender:'Physio AI', sessionId:-1, ts:Date.now(), isBot:true
+    });
+  }
+});
+// ── Init WaEmojiPanel ────────────────────────────────────────────────
+WaEmojiPanel.init({
+  getInputEl: function(){ return document.getElementById('msgInp'); },
+  sendMessage: function(){ doSend(); },
+  addEmoji: function(ch){
+    var inp=document.getElementById('msgInp'); if(!inp) return;
+    if(ch==='\b'){ inp.value=inp.value.slice(0,-1); }
+    else { inp.value+=ch; }
+    onType(); _fjResizeTA(inp); inp.focus();
+  },
+  sendSticker: function(src,label,emoji){
+    if(!src) return;
+    // Capture reply BEFORE async upload (user might clear it)
+    var _reply = _fjReplyTo ? JSON.parse(JSON.stringify(_fjReplyTo)) : null;
+    if(_reply) fjClearReply();
+    // Upload to our R2 so ALL users can load it (Stipop URLs need auth headers)
+    function _pushSticker(url){
+      var obj={fileUrl:url,fileType:'image/sticker',sender:'Anonymous',sessionId:_anonId,ts:Date.now()};
+      if(_reply) obj.replyTo=_reply;
+      var ref=db.ref('fun_chat').push(obj);
+      _myMsgIds.add(ref.key);
+    }
+    // Fetch image → blob → upload to R2
+    fetch(src,{mode:'cors'}).then(function(r){return r.blob();}).then(function(blob){
+      var ext=(blob.type||'image/png').split('/')[1]||'png';
+      var file=new File([blob],'sticker_'+Date.now()+'.'+ext,{type:blob.type||'image/png'});
+      showFjPill('Sending sticker…');
+      uploadFile(file,'stickers').then(function(res){
+        hideFjPill();
+        _pushSticker(res.success?res.url:src);
+      }).catch(function(){hideFjPill();_pushSticker(src);});
+    }).catch(function(){_pushSticker(src);});
+  },
+  sendGif: function(url,title){
+    // Capture reply BEFORE async upload
+    var _reply = _fjReplyTo ? JSON.parse(JSON.stringify(_fjReplyTo)) : null;
+    if(_reply) fjClearReply();
+    function _pushGif(u){
+      var obj={fileUrl:u,fileType:'image/gif',sender:'Anonymous',sessionId:_anonId,ts:Date.now()};
+      if(_reply) obj.replyTo=_reply;
+      var ref=db.ref('fun_chat').push(obj);
+      _myMsgIds.add(ref.key);
+    }
+    // Re-upload GIPHY gif to R2 so it works in WebView without CORS issues
+    fetch(url,{mode:'cors'}).then(function(r){return r.blob();}).then(function(blob){
+      var file=new File([blob],'gif_'+Date.now()+'.gif',{type:'image/gif'});
+      showFjPill('Sending GIF…');
+      uploadFile(file,'gifs').then(function(res){
+        hideFjPill();
+        _pushGif(res.success?res.url:url);
+      }).catch(function(){hideFjPill();_pushGif(url);});
+    }).catch(function(){_pushGif(url);});
+  },
+  sendVoice: function(blob,mime,viewOnce){
+    var _reply = _fjReplyTo ? JSON.parse(JSON.stringify(_fjReplyTo)) : null;
+    if(_reply) fjClearReply();
+    var file=new File([blob],'voice_'+Date.now()+'.webm',{type:mime});
+    showFjPill('Sending voice…');
+    uploadFile(file,'chat').then(function(res){
+      hideFjPill();
+      if(!res.success){showToast('Upload failed','error');return;}
+      var obj={text:'🎤 Voice Note',fileUrl:res.url,fileType:mime,sender:'Anonymous',sessionId:_anonId,ts:Date.now()};
+      if(viewOnce) obj.viewOnce=true;
+      if(_reply) obj.replyTo=_reply;
+      var ref=db.ref('fun_chat').push(obj);
+      _myMsgIds.add(ref.key);
+    });
+  }
+});
+// Wire camera label input — user's finger on label = real gesture = camera opens
+(function(){
+  var cam = document.getElementById('_camInpFj');
+  if (cam) {
+    cam.addEventListener('change', function(){
+      if (!cam.files || !cam.files[0]) return;
+      var f = cam.files[0];
+      cam.value = '';
+      if (typeof showFilePreview === 'function') {
+        showFilePreview(f, function(file, caption){ sendFjFile(file, caption); });
+      } else { onAttached(f); }
+    });
+  }
+})();
+loadJokesPin();
+// ── Typing + Recording indicator — WhatsApp bubble style ─────────────────────
+var _fjTypingRef = db.ref('typing/funjokes/'+_anonId);
+var _fjTypingTimer = null;
+function _fjSendTyping(isRec) {
+  _fjTypingRef.set({ anonId:_anonId, recording:!!isRec, ts: Date.now() });
+  clearTimeout(_fjTypingTimer);
+  _fjTypingTimer = setTimeout(function() { _fjTypingRef.remove(); }, isRec ? 10000 : 3000);
+}
+db.ref('typing/funjokes').on('value', function(snap) {
+  var bar = document.getElementById('fjTypingBar');
+  var dots = document.getElementById('fjTypingDots');
+  var recB = document.getElementById('fjRecBars');
+  var txt  = document.getElementById('fjTypingText');
+  var avs  = document.getElementById('fjTypingAvatars');
+  if (!bar) return;
+  var typers=[], isRec=false;
+  snap.forEach(function(c) {
+    var d=c.val();
+    if(!d||c.key===String(_anonId)) return;
+    if((Date.now()-(d.ts||0))>6000) return;
+    typers.push(d);
+    if(d.recording) isRec=true;
+  });
+  if(!typers.length){bar.style.display='none';return;}
+  bar.style.display='block';
+  // Avatars — show anonymous icons for group
+  if(avs){
+    avs.innerHTML=typers.slice(0,3).map(function(){
+      return '<div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#ec4899);display:flex;align-items:center;justify-content:center;font-size:11px;color:white;flex-shrink:0;border:2px solid #111b21">😈</div>';
+    }).join('');
+  }
+  if(isRec){
+    if(dots) dots.style.display='none';
+    if(recB) recB.style.display='flex';
+    if(txt) txt.textContent=typers.length>1?typers.length+' recording…':'recording…';
+  } else {
+    if(dots) dots.style.display='flex';
+    if(recB) recB.style.display='none';
+    if(txt) txt.textContent=typers.length>1?typers.length+' typing…':'';
+  }
+});
+(function(){
+  var inp = document.getElementById('msgInp');
+  if (inp) inp.addEventListener('input', function(){ if(inp.value.trim()) _fjSendTyping(); });
+})();
+// Cleanup on page hide
+window.addEventListener('pagehide', function() { _fjTypingRef.remove(); });
+db.ref('fun_chat').on('child_changed',function(snap){
+  var v = snap.val(); if(!v) return;
+  var el = document.getElementById('m_'+snap.key);
+  if (!el) return;
+  // Update text span directly by class — immediate DOM update
+  var txtSpan = el.querySelector('._msgtext');
+  if (txtSpan) {
+    txtSpan.textContent = v.text || '';
+  }
+  // Add or update "edited" badge in .bmeta
+  var bub = el.querySelector('.bubble');
+  if (bub && v.edited) {
+    var meta = bub.querySelector('.bmeta');
+    if (meta && !bub.querySelector('._editedBadge')) {
+      var badge = document.createElement('span');
+      badge.className = '_editedBadge';
+      badge.style.cssText = 'font-size:10px;color:#8696a0;margin-right:4px;font-style:italic';
+      badge.textContent = 'edited';
+      meta.insertBefore(badge, meta.firstChild);
+    }
+  }
+  // Update local cache
+  if (window._fjMsgCache && window._fjMsgCache[snap.key]) {
+    window._fjMsgCache[snap.key].text = v.text || '';
+  }
+});
+
+db.ref('fun_chat').limitToLast(80).on('child_added',function(snap){
+  var v=snap.val();
+  renderMsg({id:snap.key,text:v.text||'',fileUrl:v.fileUrl||null,fileType:v.fileType||null,fileName:v.fileName||null,sender:v.sender||'Anonymous',sessionId:v.sessionId||null,ts:v.ts||Date.now(),isBot:v.isBot||false,viewOnce:v.viewOnce||false,replyTo:v.replyTo||null,reactions:v.reactions||null});
+});
+
+// ── Offline fallback ──────────────────────────────────────────────────────
+if (typeof OfflineCache !== 'undefined') {
+  var _fjBanner = null;
+  function _showFjBanner(online) {
+    if (!_fjBanner) {
+      _fjBanner = document.createElement('div');
+      _fjBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;text-align:center;font-size:13px;font-weight:600;padding:7px 16px;transition:all .3s;pointer-events:none';
+      document.body.appendChild(_fjBanner);
+    }
+    if (online) {
+      _fjBanner.style.background='rgba(16,185,129,.9)'; _fjBanner.style.color='#fff';
+      _fjBanner.textContent='✅ Back online'; setTimeout(function(){_fjBanner.style.display='none';},2500);
+    } else {
+      _fjBanner.style.display=''; _fjBanner.style.background='rgba(239,68,68,.9)'; _fjBanner.style.color='#fff';
+      _fjBanner.textContent='📵 Offline — showing cached messages';
+    }
+  }
+  OfflineCache.onConnChange(function(online){
+    _showFjBanner(online);
+    if (!online) {
+      var c=document.getElementById('msgs'); if(!c||c.children.length>0)return;
+      OfflineCache.getMsgs('funjokes',80).then(function(msgs){if(msgs&&msgs.length)msgs.forEach(function(m){renderMsg(m);});});
+    }
+  });
+  if (!OfflineCache.isOnline()) {
+    setTimeout(function(){_showFjBanner(false);},400);
+    var _fjC=document.getElementById('msgs');
+    if(_fjC&&_fjC.children.length===0){
+      OfflineCache.getMsgs('funjokes',80).then(function(msgs){if(msgs&&msgs.length)msgs.forEach(function(m){renderMsg(m);});});
+    }
+  }
+}
+
+// Auto-joke bot every 3 min
+var JOKES=['Belle big dey tear singlet 🤣','Why did the physio break up? Too many joint issues 😂','Told my patient to walk it off… still walking 🚶','Anatomy exam tomorrow? Don\'t lose your head! 💀😂','Why don\'t bones tell jokes? They\'d crack you up! 🦴','Physio students: always a shoulder to lean on 💪','My back hurts from carrying this whole class 😭','Lecturer says "simple anatomy"… liar 😤','The knee bone\'s connected to the overtime bone 💪'];
+setInterval(function(){db.ref('fun_chat').push({text:JOKES[Math.floor(Math.random()*JOKES.length)],sender:'Fun Bot',ts:Date.now(),isBot:true});},180000);
+
+/* ── ANONYMOUS CARDS ──────────────────────────────────────────────────── */
+// ── Inject keyframes once ──
+(function(){
+  if (document.getElementById('_anonKfStyle')) return;
+  var s = document.createElement('style'); s.id = '_anonKfStyle';
+  s.textContent =
+    '@keyframes _anonSlideIn{from{transform:translateX(100%);opacity:.4}to{transform:translateX(0);opacity:1}}' +
+    '@keyframes _anonSlideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(-100%);opacity:.4}}' +
+    '@keyframes _anonSlideInRev{from{transform:translateX(-100%);opacity:.4}to{transform:translateX(0);opacity:1}}' +
+    '@keyframes _anonSlideOutRev{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:.4}}' +
+    '@keyframes _anonCommentIn{from{transform:translateY(100%)}to{transform:translateY(0)}}' +
+    '._anonCard{transition:box-shadow .2s}' +
+    '._anonCard:active{box-shadow:0 8px 40px rgba(139,92,246,.5)!important}';
+  document.head.appendChild(s);
+})();
+
+var _anonCards = [], _anonIdx = 0, _anonDir = 1, _anonAnimating = false;
+
+function _anonGetExpiry() {
+  var v = localStorage.getItem('_anonExpiry') || 'never';
+  return v;
+}
+
+function _anonIsExpired(ts) {
+  var e = _anonGetExpiry();
+  if (e === 'never') return false;
+  var age = Date.now() - (ts || 0);
+  if (e === 'daily')   return age > 86400000;
+  if (e === 'weekly')  return age > 604800000;
+  if (e === 'monthly') return age > 2592000000;
+  return false;
+}
+
+/* ── Anonymous Card Video Player — first frame + minimal controls ── */
+function _buildAnonCardVideo(url) {
+  var id = '_acv_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  var html =
+    '<div id="'+id+'_wrap" style="width:100%;border-radius:18px;overflow:hidden;margin-bottom:20px;background:#000;position:relative;max-height:260px">' +
+      '<canvas id="'+id+'_cv" style="width:100%;display:block;border-radius:18px;max-height:260px;object-fit:cover"></canvas>' +
+      '<video id="'+id+'_v" src="'+url+'" muted playsinline preload="metadata" style="display:none"></video>' +
+      // Mute button — top-right of card (added dynamically after play starts)
+      '<div id="'+id+'_play" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px">' +
+        '<button onclick="event.stopPropagation();_acvPlay(this.closest(\'[data-acvid]\').dataset.acvid)" style="width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.6);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">' +
+          '<svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>' +
+        '</button>' +
+        '<span style="font-size:11px;color:rgba(255,255,255,.6);background:rgba(0,0,0,.4);padding:3px 10px;border-radius:10px">Tap to play</span>' +
+      '</div>' +
+      '<div id="'+id+'_ctrls" style="display:none;position:absolute;bottom:0;left:0;right:0;padding:8px 12px;background:linear-gradient(to top,rgba(0,0,0,.7),transparent);display:flex;align-items:center;gap:10px">' +
+        '<button id="'+id+'_pbtn" onclick="event.stopPropagation();_acvToggle(this.closest(\'[data-acvid]\').dataset.acvid)" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>' +
+        '</button>' +
+        '<div style="flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px"><div id="'+id+'_prog" style="height:100%;width:0%;background:#ec4899;border-radius:2px;pointer-events:none;transition:width .3s linear"></div></div>' +
+        '<button onclick="event.stopPropagation();_acvSpeed(this.closest(\'[data-acvid]\').dataset.acvid)" id="'+id+'_spd" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:3px 7px;cursor:pointer">1x</button>' +
+      '</div>' +
+    '</div>';
+  setTimeout(function() {
+    var v = document.getElementById(id+'_v');
+    var cv = document.getElementById(id+'_cv');
+    var playDiv = document.getElementById(id+'_play');
+    var wrap = document.getElementById(id+'_wrap');
+    if (!v || !cv) return;
+    if (wrap) wrap.setAttribute('data-acvid', id);
+    v.addEventListener('loadedmetadata', function() { v.currentTime = 0.1; });
+    v.addEventListener('seeked', function() {
+      var w = v.videoWidth || 320, h = v.videoHeight || 240;
+      var mw = cv.offsetWidth || 320, mh = 260;
+      var s = Math.min(mw/w, mh/h);
+      cv.width = Math.round(w*s); cv.height = Math.round(h*s);
+      try { cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height); } catch(e) {}
+      if (playDiv) playDiv.style.display = 'flex';
+    });
+  }, 50);
+  return html;
+}
+function _acvPlay(id) {
+  var v = document.getElementById(id+'_v'); if(!v) return;
+  v.muted = false; // Start unmuted
+  v.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:18px;display:block';
+  document.getElementById(id+'_play').style.display='none';
+  document.getElementById(id+'_ctrls').style.display='flex';
+  var pbtn = document.getElementById(id+'_pbtn');
+  // Add mute button at top-right of the CARD (not inside the video)
+  var wrap = document.getElementById(id+'_wrap');
+  if (wrap && !document.getElementById(id+'_muteBtn')) {
+    var muteBtn = document.createElement('button');
+    muteBtn.id = id+'_muteBtn';
+    muteBtn.style.cssText = 'position:absolute;top:10px;right:10px;z-index:10;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.55);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+    muteBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+    muteBtn.onclick = function(e) {
+      e.stopPropagation();
+      v.muted = !v.muted;
+      muteBtn.innerHTML = v.muted
+        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+    };
+    wrap.appendChild(muteBtn);
+  }
+  v.play();
+  v.ontimeupdate=function(){ var p=document.getElementById(id+'_prog'); if(p&&v.duration) p.style.width=(v.currentTime/v.duration*100)+'%'; };
+  v.onended=function(){ if(pbtn) pbtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>'; v.currentTime=0; };
+}
+function _acvToggle(id) {
+  var v=document.getElementById(id+'_v'); if(!v) return;
+  var pbtn=document.getElementById(id+'_pbtn');
+  if(v.paused){ v.play(); pbtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>'; }
+  else { v.pause(); pbtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>'; }
+}
+function _acvSpeed(id) {
+  var v=document.getElementById(id+'_v'); if(!v) return;
+  var spd=document.getElementById(id+'_spd'); if(!spd) return;
+  var speeds=[1,1.5,2,0.5];
+  var cur=parseFloat(spd.textContent)||1;
+  var idx=speeds.indexOf(cur); idx=(idx+1)%speeds.length;
+  v.playbackRate=speeds[idx]; spd.textContent=speeds[idx]+'x';
+}
+
+function openAnonCards() {
+  var ex = document.getElementById('_anonCardsOv'); if (ex) { ex.remove(); return; }
+  var ov = document.createElement('div');
+  ov.id = '_anonCardsOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0d1117;display:flex;flex-direction:column;font-family:-apple-system,sans-serif';
+  ov.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #1f2937;flex-shrink:0;background:#0d1117">' +
+      '<button onclick="document.getElementById(\'_anonCardsOv\').remove()" style="background:#1f2937;border:none;border-radius:50%;width:38px;height:38px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">←</button>' +
+      '<div style="flex:1"><div style="font-size:17px;font-weight:800;color:#fff">🎭 Anonymous Cards</div><div style="font-size:11px;color:#6b7280">Swipe left/right · Double-tap to comment</div></div>' +
+      '<button onclick="openAnonSettings()" style="background:#1f2937;border:none;border-radius:50%;width:36px;height:36px;color:#9ca3af;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>' +
+      '<button onclick="openAnonCompose()" style="background:linear-gradient(135deg,#9333ea,#ec4899);border:none;border-radius:20px;padding:8px 14px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">+ Post</button>' +
+    '</div>' +
+    '<div id="_anonCardArea" style="flex:1;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center"></div>' +
+    '<div style="display:flex;align-items:center;justify-content:center;padding:10px 20px 18px;border-top:1px solid #1f2937;flex-shrink:0;background:#0d1117;gap:16px">' +
+      '<span style="font-size:12px;color:rgba(255,255,255,.3);letter-spacing:.5px">← SWIPE →</span>' +
+      '<div id="_anonCardIdx" style="color:#a78bfa;font-size:13px;font-weight:700;background:rgba(147,51,234,.18);border-radius:20px;padding:5px 16px">Loading…</div>' +
+      '<span style="font-size:12px;color:rgba(255,255,255,.3)">double-tap to comment</span>' +
+    '</div>';
+  document.body.appendChild(ov);
+  _anonLoadCards();
+}
+
+
+
+function _anonLoadCards() {
+  db.ref('anon_cards').orderByChild('ts').limitToLast(100).on('value', function(snap) {
+    _anonCards = [];
+    snap.forEach(function(c){ _anonCards.push({id:c.key, data:c.val()}); });
+    _anonCards.reverse();
+    // Filter expired
+    _anonCards = _anonCards.filter(function(c){ return !_anonIsExpired(c.data.ts); });
+    _anonIdx = 0;
+    _anonRenderCard(0);
+  });
+}
+
+function _anonRenderCard(animDir) {
+  var area = document.getElementById('_anonCardArea');
+  var idxEl = document.getElementById('_anonCardIdx');
+  if (!area) return;
+  if (!_anonCards.length) {
+    area.innerHTML = '<div style="text-align:center;color:#4b5563;padding:40px 20px"><div style="font-size:64px;margin-bottom:16px">🃏</div><div style="font-size:18px;font-weight:700;color:#6b7280;margin-bottom:8px">No cards yet</div><div style="font-size:14px;color:#374151">Be the first — tap + Post!</div></div>';
+    if (idxEl) idxEl.textContent = '0 / 0'; return;
+  }
+  if (_anonIdx < 0) _anonIdx = _anonCards.length - 1;
+  if (_anonIdx >= _anonCards.length) _anonIdx = 0;
+  if (idxEl) idxEl.textContent = (_anonIdx+1) + ' / ' + _anonCards.length;
+
+  var card = _anonCards[_anonIdx]; var d = card.data;
+  var grads = [
+    'linear-gradient(160deg,#1e1b4b 0%,#3730a3 50%,#4f46e5 100%)',
+    'linear-gradient(160deg,#1a0533 0%,#4a1d96 50%,#7c3aed 100%)',
+    'linear-gradient(160deg,#0c1445 0%,#1e3a8a 50%,#2563eb 100%)',
+    'linear-gradient(160deg,#0a2518 0%,#065f46 50%,#10b981 100%)',
+    'linear-gradient(160deg,#1c0a00 0%,#7c2d12 50%,#ea580c 100%)',
+    'linear-gradient(160deg,#1f1235 0%,#6d28d9 50%,#ec4899 100%)'
+  ];
+  var grad = grads[_anonIdx % grads.length];
+  var replyCount = d.replies ? Object.keys(d.replies).length : 0;
+
+  var el = document.createElement('div');
+  el.className = '_anonCard';
+  // Full-area card — fills available space
+  el.style.cssText =
+    'position:absolute;inset:12px;background:'+grad+';border-radius:28px;' +
+    'box-shadow:0 24px 80px rgba(0,0,0,.8);overflow:hidden;display:flex;flex-direction:column;' +
+    'cursor:pointer;-webkit-tap-highlight-color:transparent;' +
+    (animDir === 1  ? 'animation:_anonSlideIn .32s cubic-bezier(.25,.46,.45,.94) both' :
+     animDir === -1 ? 'animation:_anonSlideInRev .32s cubic-bezier(.25,.46,.45,.94) both' : '');
+
+  el.innerHTML =
+    // Background decorative circles
+    '<div style="position:absolute;top:-60px;right:-60px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.05);pointer-events:none"></div>' +
+    '<div style="position:absolute;bottom:-80px;left:-40px;width:280px;height:280px;border-radius:50%;background:rgba(255,255,255,.04);pointer-events:none"></div>' +
+    // Main content
+    '<div style="flex:1;display:flex;flex-direction:column;padding:28px 26px 20px;position:relative;overflow-y:auto;-webkit-overflow-scrolling:touch;justify-content:center;align-items:center">' +
+      '<div style="font-size:10px;color:rgba(255,255,255,.4);font-weight:700;letter-spacing:2px;margin-bottom:20px;text-align:center">✦ BY ANONYMOUS ✦</div>' +
+      (d.videoUrl ? _buildAnonCardVideo(d.videoUrl) : '') +
+      (d.imageUrl && !d.videoUrl ? '<img src="'+d.imageUrl+'" style="width:100%;border-radius:18px;margin-bottom:20px;max-height:220px;object-fit:cover" onerror="this.style.display=\'none\'">' : '') +
+      '<div style="text-align:center;font-size:'+((d.text||'').length < 60 ? '26' : (d.text||'').length < 120 ? '20' : '17')+'px;font-weight:700;color:#fff;line-height:1.6;width:100%">'+(d.text||'')+'</div>' +
+    '</div>' +
+    // Bottom info bar
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 24px 18px;background:rgba(0,0,0,.25);flex-shrink:0">' +
+      '<div style="font-size:12px;color:rgba(255,255,255,.4)">'+new Date(d.ts||Date.now()).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+'</div>' +
+      '<button data-cid="'+card.id+'" data-cprev="'+encodeURIComponent((d.text||'').substring(0,80))+'" onclick="event.stopPropagation();openAnonComments(this.dataset.cid,decodeURIComponent(this.dataset.cprev))" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);border:none;border-radius:20px;padding:8px 14px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+        replyCount+' Comments' +
+      '</button>' +
+    '</div>';
+
+  // Swipe support
+  var _sx = null, _dx = 0;
+  el.addEventListener('touchstart', function(e){ _sx = e.touches[0].clientX; }, {passive:true});
+  el.addEventListener('touchmove', function(e){
+    if (_sx === null) return;
+    _dx = e.touches[0].clientX - _sx;
+    el.style.transform = 'translateX('+(_dx*0.25)+'px) rotate('+(_dx*0.01)+'deg)';
+  }, {passive:true});
+  el.addEventListener('touchend', function(e) {
+    if (_sx === null) return;
+    el.style.transform = '';
+    var finalDx = e.changedTouches[0].clientX - _sx; _sx = null;
+    if (Math.abs(finalDx) > 55) { _anonNav(finalDx < 0 ? 1 : -1); }
+  }, {passive:true});
+
+  // Double-tap = open comments
+  var _lastTap = 0;
+  el.addEventListener('click', function() {
+    var now = Date.now();
+    if (now - _lastTap < 380) { openAnonComments(card.id, (d.text||'').substring(0,80)); _lastTap = 0; }
+    else _lastTap = now;
+  });
+
+  area.innerHTML = ''; area.appendChild(el);
+}
+
+function _anonNav(dir) {
+  if (_anonAnimating) return;
+  _anonAnimating = true;
+  _anonIdx += dir;
+  if (_anonIdx < 0) _anonIdx = _anonCards.length - 1;
+  if (_anonIdx >= _anonCards.length) _anonIdx = 0;
+  _anonRenderCard(dir);
+  setTimeout(function(){ _anonAnimating = false; }, 350);
+}
+
+/* ── Compose Card ─────────────────────────── */
+function openAnonCompose() {
+  var ex = document.getElementById('_anonCompOv'); if (ex) { ex.remove(); return; }
+  var ov = document.createElement('div'); ov.id = '_anonCompOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;justify-content:center';
+  ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+  ov.innerHTML =
+    '<div style="width:100%;max-width:520px;background:#111827;border-radius:24px 24px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom))">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+        '<div style="font-size:17px;font-weight:800;color:#fff">🎭 Post Anonymous Card</div>' +
+        '<button onclick="document.getElementById(\'_anonCompOv\').remove()" style="background:#1f2937;border:none;border-radius:50%;width:32px;height:32px;color:#9ca3af;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">✕</button>' +
+      '</div>' +
+      '<textarea id="_anonText" placeholder="Write something anonymously… 😶‍🌫️" maxlength="280" style="width:100%;background:#1a1f2e;border:1px solid #374151;border-radius:16px;padding:14px;color:#fff;font-size:15px;outline:none;resize:none;height:130px;box-sizing:border-box;font-family:inherit;caret-color:#8b5cf6"></textarea>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-top:12px">' +
+        '<label style="flex:1;background:#1a1f2e;border:1px solid #374151;border-radius:14px;padding:12px;color:#9ca3af;font-size:13px;cursor:pointer;text-align:center">📷 Image<input type="file" accept="image/*" id="_anonImgIn" style="display:none" onchange="_anonPreviewMedia(this,false)"></label>' +
+        '<label style="flex:1;background:#1a1f2e;border:1px solid #374151;border-radius:14px;padding:12px;color:#9ca3af;font-size:13px;cursor:pointer;text-align:center">🎬 Video<input type="file" accept="video/*" id="_anonVidIn" style="display:none" onchange="_anonPreviewMedia(this,true)"></label>' +
+        '<button onclick="_anonSubmitCard()" style="flex:2;background:linear-gradient(135deg,#9333ea,#ec4899);border:none;border-radius:14px;padding:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer">Post Card</button>' +
+      '</div>' +
+      '<div id="_anonImgPrev" style="margin-top:10px"></div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ var t=document.getElementById('_anonText'); if(t) t.focus(); }, 100);
+}
+
+window._anonPreviewImg = function(inp) { window._anonPreviewMedia(inp, false); };
+window._anonPreviewMedia = function(inp, isVideo) {
+  var prev = document.getElementById('_anonImgPrev'); if (!inp.files||!inp.files[0]||!prev) return;
+  var r = new FileReader();
+  r.onload = function(e){
+    if (isVideo) {
+      prev.innerHTML = '<video src="'+e.target.result+'" controls muted playsinline style="width:100%;border-radius:16px;max-height:200px;object-fit:cover;display:block"></video><p style="font-size:11px;color:#6b7280;margin:4px 0 0;text-align:center">'+inp.files[0].name+'</p>';
+    } else {
+      prev.innerHTML = '<img src="'+e.target.result+'" style="max-width:100%;border-radius:12px;max-height:140px;object-fit:cover">';
+    }
+  };
+  r.readAsDataURL(inp.files[0]);
+};
+
+window._anonSubmitCard = function() {
+  var text = (document.getElementById('_anonText')||{}).value || '';
+  if (!text.trim()) { if(typeof showToast==='function') showToast('Write something first!','error'); return; }
+  var imgInp = document.getElementById('_anonImgIn');
+  var vidInp = document.getElementById('_anonVidIn');
+  var imgFile = imgInp && imgInp.files && imgInp.files[0];
+  var vidFile = vidInp && vidInp.files && vidInp.files[0];
+  var file = vidFile || imgFile;
+  var isVideo = !!vidFile;
+  function _pushCard(mediaUrl) {
+    var obj = {text:text.trim(), ts:Date.now()};
+    if (mediaUrl && isVideo) obj.videoUrl = mediaUrl;
+    else if (mediaUrl) obj.imageUrl = mediaUrl;
+    db.ref('anon_cards').push(obj).then(function(){
+      if(typeof showToast==='function') showToast('🎭 Card posted anonymously!');
+      var ov=document.getElementById('_anonCompOv'); if(ov) ov.remove();
+    }).catch(function(){ if(typeof showToast==='function') showToast('Failed to post','error'); });
+  }
+  if (file && typeof uploadFileWithProgress === 'function') {
+    if(typeof showToast==='function') showToast(isVideo?'Uploading video…':'Uploading image…');
+    uploadFileWithProgress(file,'anon_cards',function(){}).then(function(res){ _pushCard(res&&res.success?res.url:null); }).catch(function(){ _pushCard(null); });
+  } else { _pushCard(null); }
+};
+
+/* ── TikTok-style Comments ───────────────── */
+function openAnonComments(cardId, previewText) {
+  var ex = document.getElementById('_anonCommOv'); if (ex) { ex.remove(); return; }
+  var ov = document.createElement('div'); ov.id = '_anonCommOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999999;display:flex;flex-direction:column;justify-content:flex-end';
+  // Backdrop
+  var bd = document.createElement('div');
+  bd.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.5)';
+  bd.onclick = function(){ ov.remove(); };
+  ov.appendChild(bd);
+  // Sheet
+  var sheet = document.createElement('div');
+  sheet.style.cssText =
+    'position:relative;z-index:1;background:#111827;border-radius:24px 24px 0 0;' +
+    'max-height:75vh;display:flex;flex-direction:column;' +
+    'animation:_anonCommentIn .3s cubic-bezier(.25,.46,.45,.94) both;' +
+    'padding-bottom:env(safe-area-inset-bottom)';
+  sheet.innerHTML =
+    // Handle
+    '<div style="display:flex;justify-content:center;padding:12px 0 6px"><div style="width:40px;height:4px;background:#374151;border-radius:2px"></div></div>' +
+    // Header
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 20px 12px;border-bottom:1px solid #1f2937;flex-shrink:0">' +
+      '<div><div style="font-size:16px;font-weight:800;color:#fff">💬 Comments</div>' +
+      '<div style="font-size:12px;color:#6b7280;margin-top:2px">Re: "'+decodeURIComponent(previewText||'')+(previewText&&previewText.length>=80?'…':'')+'"</div></div>' +
+      '<button onclick="document.getElementById(\'_anonCommOv\').remove()" style="background:#1f2937;border:none;border-radius:50%;width:32px;height:32px;color:#9ca3af;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">✕</button>' +
+    '</div>' +
+    // Comments list
+    '<div id="_anonCommList" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 0"><div style="text-align:center;padding:30px 20px;color:#4b5563;font-size:14px">Loading…</div></div>' +
+    // Name-reveal toggle row
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;flex-shrink:0;background:#111827">' +
+      '<span style="font-size:12px;color:#6b7280">Comment as:</span>' +
+      '<div style="flex:1"></div>' +
+      '<span id="_anonRevealLbl" style="font-size:13px;color:#8b5cf6;font-weight:700">Anonymous</span>' +
+      '<div id="_anonToggleWrap" onclick="_anonToggleSwitch()" ' +
+        'style="width:46px;height:26px;border-radius:13px;background:#374151;position:relative;cursor:pointer;flex-shrink:0;transition:background .2s;-webkit-tap-highlight-color:transparent">' +
+        '<div id="_anonToggleThumb" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s"></div>' +
+      '</div>' +
+    '</div>' +
+    // Input row
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px 12px;border-top:none;flex-shrink:0;background:#111827">' +
+      '<div id="_anonCommAv" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6d28d9,#ec4899);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">😶</div>' +
+      '<input id="_anonCommInput" placeholder="Add a comment… (anonymous)" maxlength="200" style="flex:1;background:#1a1f2e;border:1px solid #374151;border-radius:24px;padding:10px 16px;color:#fff;font-size:14px;outline:none;caret-color:#8b5cf6;font-family:inherit">' +
+      '<button id="_anonCommSend" style="background:linear-gradient(135deg,#9333ea,#ec4899);border:none;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><polygon points="22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
+      '</button>' +
+    '</div>';
+  ov.appendChild(sheet);
+  document.body.appendChild(ov);
+
+  // Load comments live
+  var listEl = document.getElementById('_anonCommList');
+  db.ref('anon_cards/'+cardId+'/replies').orderByChild('ts').on('value', function(snap) {
+    if (!document.getElementById('_anonCommOv')) return;
+    var items = [];
+    snap.forEach(function(c){ items.push({id:c.key, d:c.val()}); });
+    if (!items.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#4b5563"><div style="font-size:40px;margin-bottom:10px">💬</div><div style="font-size:15px">No comments yet</div><div style="font-size:13px;margin-top:4px;color:#374151">Be the first to comment!</div></div>';
+      return;
+    }
+    listEl.innerHTML = items.map(function(item, i){
+      var d = item.d;
+      var ago = _anonTimeAgo(d.ts);
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 16px;'+(i>0?'border-top:1px solid #1f2937':'')+'">' +
+        '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#'+(i%2===0?'6d28d9,#ec4899':'1d4ed8,#7c3aed')+');display:flex;align-items:center;justify-content:center;font-size:'+(d.name?'18':'15')+'px;font-weight:700;flex-shrink:0;color:#fff">'+(d.name?d.name[0].toUpperCase():'😶')+'</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">' +
+            '<span style="color:#fff;font-size:13.5px;font-weight:700">'+(d.name||'Anonymous')+'</span>' +
+            '<span style="color:#6b7280;font-size:11px">'+ago+'</span>' +
+          '</div>' +
+          '<div style="color:#d1d5db;font-size:14px;line-height:1.5">'+(d.text||'')+'</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    listEl.scrollTop = listEl.scrollHeight;
+  });
+
+  // Send comment — name-aware
+  document.getElementById('_anonCommSend').addEventListener('click', function() {
+    var inp = document.getElementById('_anonCommInput');
+    var t = (inp||{}).value || '';
+    if (!t.trim()) return;
+    var revealed = !_anonCommentAsAnon;
+    var _cu = window.currentUser || (typeof auth !== 'undefined' && auth.currentUser);
+    var commenterName = revealed && _cu
+      ? (_cu.displayName || (_cu.email ? _cu.email.split('@')[0] : null) || null)
+      : null;
+    var obj = {text:t.trim(), ts:Date.now()};
+    if (commenterName) obj.name = commenterName;
+    db.ref('anon_cards/'+cardId+'/replies').push(obj);
+    if (inp) inp.value = '';
+  });
+  document.getElementById('_anonCommInput').addEventListener('keydown', function(e){
+    if (e.key==='Enter') { document.getElementById('_anonCommSend').click(); }
+  });
+  setTimeout(function(){ var i=document.getElementById('_anonCommInput'); if(i) i.focus(); }, 300);
+}
+
+// Global flag for anon comment toggle
+var _anonCommentAsAnon = true;
+
+function _anonToggleSwitch() {
+  _anonCommentAsAnon = !_anonCommentAsAnon;
+  var wrap = document.getElementById('_anonToggleWrap');
+  var thumb = document.getElementById('_anonToggleThumb');
+  var lbl = document.getElementById('_anonRevealLbl');
+  var av = document.getElementById('_anonCommAv');
+  var inp = document.getElementById('_anonCommInput');
+
+  if (_anonCommentAsAnon) {
+    // Anonymous mode
+    if (wrap) wrap.style.background = '#374151';
+    if (thumb) thumb.style.left = '3px';
+    if (lbl) { lbl.textContent = 'Anonymous'; lbl.style.color = '#8b5cf6'; }
+    if (av) { av.style.background = 'linear-gradient(135deg,#6d28d9,#ec4899)'; av.textContent = '😶'; }
+    if (inp) inp.placeholder = 'Add a comment… (anonymous)';
+  } else {
+    // Named mode
+    var myName = 'You';
+    if (window.currentUser) {
+      myName = window.currentUser.displayName ||
+        (window.currentUser.email ? window.currentUser.email.split('@')[0] : null) ||
+        (auth && auth.currentUser && auth.currentUser.displayName) || 'You';
+    }
+    if (wrap) wrap.style.background = 'linear-gradient(135deg,#9333ea,#ec4899)';
+    if (thumb) thumb.style.left = '23px';
+    if (lbl) { lbl.textContent = myName; lbl.style.color = '#ec4899'; }
+    if (av) { av.style.background = 'linear-gradient(135deg,#ec4899,#f97316)'; av.textContent = myName[0].toUpperCase(); }
+    if (inp) inp.placeholder = 'Add a comment… (as ' + myName + ')';
+  }
+}
+
+function _anonTimeAgo(ts) {
+  if (!ts) return '';
+  var s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60)+'m';
+  if (s < 86400) return Math.floor(s/3600)+'h';
+  return Math.floor(s/86400)+'d';
+}
+
+/* ── Settings ────────────────────────────── */
+function openAnonSettings() {
+  var ex = document.getElementById('_anonSettOv'); if (ex) { ex.remove(); return; }
+  var ov = document.createElement('div'); ov.id = '_anonSettOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center';
+  ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+  var cur = _anonGetExpiry();
+  var opts = [
+    {v:'never',  lb:'♾️ Never expire',      sub:'Cards stay forever'},
+    {v:'daily',  lb:'☀️ Daily',             sub:'Cards disappear after 24 hours'},
+    {v:'weekly', lb:'📅 Weekly',            sub:'Cards disappear after 7 days'},
+    {v:'monthly',lb:'🗓️ Monthly',           sub:'Cards disappear after 30 days'}
+  ];
+  ov.innerHTML =
+    '<div style="width:100%;max-width:520px;background:#111827;border-radius:24px 24px 0 0;padding:20px 20px calc(20px + env(safe-area-inset-bottom))">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">' +
+        '<div style="font-size:17px;font-weight:800;color:#fff">⚙️ Card Settings</div>' +
+        '<button onclick="document.getElementById(\'_anonSettOv\').remove()" style="background:#1f2937;border:none;border-radius:50%;width:32px;height:32px;color:#9ca3af;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">✕</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#6b7280;font-weight:700;letter-spacing:.5px;margin-bottom:10px">CARD EXPIRY</div>' +
+      opts.map(function(o){
+        var sel = cur === o.v;
+        return '<button onclick="_anonSetExpiry(\''+o.v+'\')" style="display:flex;align-items:center;gap:14px;width:100%;background:'+(sel?'rgba(139,92,246,.15)':'#1a1f2e')+';border:'+(sel?'2px solid #8b5cf6':'1px solid #374151')+';border-radius:16px;padding:14px;margin-bottom:8px;cursor:pointer;text-align:left">' +
+          '<div style="flex:1">' +
+            '<div style="color:#fff;font-size:14px;font-weight:700">'+o.lb+'</div>' +
+            '<div style="color:#6b7280;font-size:12px;margin-top:2px">'+o.sub+'</div>' +
+          '</div>' +
+          (sel ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="#8b5cf6"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
+        '</button>';
+      }).join('') +
+    '</div>';
+  document.body.appendChild(ov);
+}
+
+window._anonSetExpiry = function(val) {
+  localStorage.setItem('_anonExpiry', val);
+  var ov = document.getElementById('_anonSettOv'); if (ov) ov.remove();
+  if (typeof showToast === 'function') {
+    var labels = {never:'♾️ Cards never expire',daily:'☀️ Cards expire daily',weekly:'📅 Cards expire weekly',monthly:'🗓️ Cards expire monthly'};
+    showToast(labels[val]||'Settings saved');
+  }
+  _anonLoadCards(); // refresh with new expiry
+};
+
+</script>
+<script>initChatTheme("funjokes");
+  setTimeout(function(){ if(typeof refreshExpiredUrls==="function") refreshExpiredUrls("public_chat"); }, 3000);
+  if (typeof refreshExpiredUrls === "function") { setTimeout(function(){ refreshExpiredUrls("public_chat_jokes"); }, 3000); }</script>
+<script>
+// Bug 5 fix: save & restore funjokes page savepoint (chat scroll position)
+(function(){
+  var _sp_key = 'funjokes';
+  var _sp_timer = null;
+  function _saveSP(){
+    if(typeof OfflineDB === 'undefined') return;
+    var msgsEl = document.getElementById('msgs');
+    var scrollTop = msgsEl ? msgsEl.scrollTop : 0;
+    OfflineDB.saveSavepoint(_sp_key, { scrollTop: scrollTop, savedAt: Date.now() });
+  }
+  function _debounceSave(){ clearTimeout(_sp_timer); _sp_timer = setTimeout(_saveSP, 800); }
+  function _restoreSP(){
+    if(typeof OfflineDB === 'undefined') return;
+    OfflineDB.getSavepoint(_sp_key).then(function(sp){
+      if(!sp || !sp.data || !sp.data.scrollTop) return;
+      setTimeout(function(){
+        var msgsEl = document.getElementById('msgs');
+        if(msgsEl) msgsEl.scrollTop = sp.data.scrollTop;
+      }, 800);
+    });
+  }
+  var msgsEl = document.getElementById('msgs');
+  if(msgsEl) msgsEl.addEventListener('scroll', _debounceSave, { passive: true });
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveSP(); });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _restoreSP);
+  else setTimeout(_restoreSP, 600);
+})();
+</script>
+</body>
+</html>

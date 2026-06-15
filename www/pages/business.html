@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <!-- Capacitor runtime (injected by build) -->
+    <script src="../capacitor.js"></script>
+    <!-- Physio SUAI Capacitor modules -->
+    <script src="../js/capacitor-bridge.js"></script>
+    <script src="../js/dexie-offline.js"></script>
+    <script src="../js/alarm-manager.js"></script>
+    <script src="../js/background-audio.js"></script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business – Physio SUAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- No aws4fetch needed: upload uses built-in crypto.subtle -->
+  <script src="../js/hybrid-config.js"></script>
+  <script src="../js/chat-theme.js"></script>
+  <script src="../js/file-preview.js"></script>
+  <script src="../js/confirm-modal.js"></script>
+  <script src="../js/main.js"></script>
+  <style>
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .fade-up{animation:fadeUp .35s ease both}
+    .biz-card{transition:transform .2s,box-shadow .2s;cursor:pointer}
+    .biz-card:active{transform:scale(.98)}
+    .tab-btn{padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s;white-space:nowrap;flex-shrink:0}
+    .tab-btn.active{background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff}
+    .tab-btn:not(.active){background:#1f2937;color:#9ca3af}
+    .like-btn{transition:transform .2s}
+    .like-btn:active{transform:scale(1.3)}
+    .notif-dot{width:10px;height:10px;background:#ec4899;border-radius:50%;position:absolute;top:2px;right:2px;border:2px solid #111827}
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+<!-- NAV -->
+<nav class="bg-gray-800 border-b border-gray-700 sticky top-0 z-40 px-4 py-3">
+  <div class="max-w-2xl mx-auto flex items-center gap-3">
+    <button onclick="history.back()" style="width:42px;height:42px;border-radius:14px;background:#1f2937;border:1.5px solid #374151;color:#e5e7eb;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <h1 class="font-bold text-lg flex-1">🏪 Business Hub</h1>
+    <button onclick="showNotifs()" id="notifBtn" style="width:42px;height:42px;border-radius:14px;background:#1f2937;border:1.5px solid #374151;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative">
+      🔔<span id="notifDot" class="notif-dot hidden"></span>
+    </button>
+    <button onclick="showRegisterModal()" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:700;padding:10px 16px;border-radius:14px;border:none;cursor:pointer;font-size:13px">+ Register</button>
+  </div>
+</nav>
+<!-- SEARCH + CATEGORIES -->
+<div class="sticky top-14 z-30 bg-gray-900 border-b border-gray-800 px-4 py-3">
+  <div class="max-w-2xl mx-auto space-y-3">
+    <div style="display:flex;align-items:center;gap:8px;background:#1f2937;border-radius:20px;padding:10px 16px;border:1.5px solid #374151">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchInput" type="search" placeholder="Search businesses…" style="flex:1;background:none;border:none;outline:none;color:#fff;font-size:14px" oninput="renderBiz()">
+    </div>
+    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none">
+      <button class="tab-btn active" onclick="setFilter('all',this)">🏬 All</button>
+      <button class="tab-btn" onclick="setFilter('Food',this)">🍕 Food</button>
+      <button class="tab-btn" onclick="setFilter('Fashion',this)">👗 Fashion</button>
+      <button class="tab-btn" onclick="setFilter('Services',this)">🔧 Services</button>
+      <button class="tab-btn" onclick="setFilter('Tech',this)">💻 Tech</button>
+      <button class="tab-btn" onclick="setFilter('Beauty',this)">💄 Beauty</button>
+      <button class="tab-btn" onclick="setFilter('Other',this)">📦 Other</button>
+    </div>
+  </div>
+</div>
+<!-- BUSINESS CARDS -->
+<div class="max-w-2xl mx-auto px-4 py-4">
+  <div id="bizGrid" class="space-y-4">
+    <div class="text-center py-12"><div class="w-10 h-10 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+  </div>
+  <div id="emptyState" class="hidden text-center py-16">
+    <div class="text-6xl mb-4">🏪</div>
+    <p class="text-gray-400 text-lg font-semibold">No businesses yet</p>
+    <p class="text-gray-600 text-sm mt-1">Be the first to register your business!</p>
+    <button onclick="showRegisterModal()" style="margin-top:24px;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:700;padding:14px 32px;border-radius:20px;border:none;cursor:pointer">Register Business →</button>
+  </div>
+</div>
+<!-- LOADING -->
+<div id="loadingOverlay" class="hidden fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
+  <div class="text-center"><div class="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div><p class="loading-text text-white mt-3 font-medium">Loading…</p></div>
+</div>
+<script>
+var allBiz = [];
+var activeFilter = 'all';
+var pendingBizImg = null;
+var pendingReceiptImg = null;
+var myNotifs = [];
+var CAT_ICONS = { Food:'🍕', Fashion:'👗', Services:'🔧', Tech:'💻', Beauty:'💄', Other:'📦' };
+var CAT_COLORS = {
+  Food:    { bg:'#3b0764', accent:'#a855f7' },
+  Fashion: { bg:'#831843', accent:'#f472b6' },
+  Services:{ bg:'#1e3a5f', accent:'#60a5fa' },
+  Tech:    { bg:'#0c4a6e', accent:'#38bdf8' },
+  Beauty:  { bg:'#4a1942', accent:'#e879f9' },
+  Other:   { bg:'#1c2a1c', accent:'#86efac' }
+};
+// ── AUTH + INIT ───────────────────────────────────────────
+auth.onAuthStateChanged(function(user) {
+  if (!user) { window.location.href = '../index.html'; return; }
+  listenBiz();
+  listenNotifs(user.uid);
+});
+// ── REAL-TIME LISTENERS ───────────────────────────────────
+function listenBiz() {
+  db.ref('businesses').limitToLast(200).on('child_added', function(snap) {
+    var b = Object.assign({ id: snap.key }, snap.val());
+    if (!allBiz.find(function(x){ return x.id === b.id; })) allBiz.unshift(b);
+    renderBiz();
+  });
+  db.ref('businesses').on('child_removed', function(snap) {
+    allBiz = allBiz.filter(function(b){ return b.id !== snap.key; });
+    renderBiz();
+  });
+  db.ref('businesses').on('child_changed', function(snap) {
+    var idx = allBiz.findIndex(function(b){ return b.id === snap.key; });
+    if (idx !== -1) allBiz[idx] = Object.assign({ id: snap.key }, snap.val());
+    renderBiz();
+  });
+}
+function listenNotifs(uid) {
+  db.ref('notifications/' + uid).on('value', function(snap) {
+    myNotifs = [];
+    snap.forEach(function(c) { myNotifs.push(Object.assign({ id: c.key }, c.val())); });
+    myNotifs.reverse();
+    var unread = myNotifs.filter(function(n){ return !n.read; }).length;
+    var dot = document.getElementById('notifDot');
+    if (dot) { if (unread > 0) dot.classList.remove('hidden'); else dot.classList.add('hidden'); }
+  });
+}
+// ── RENDER ────────────────────────────────────────────────
+function renderBiz() {
+  var q = ((document.getElementById('searchInput')||{}).value||'').toLowerCase();
+  var filtered = allBiz.filter(function(b) {
+    var mf = activeFilter === 'all' || (b.category||'') === activeFilter;
+    var ms = !q || (b.name||'').toLowerCase().includes(q) || (b.description||'').toLowerCase().includes(q) || (b.ownerName||'').toLowerCase().includes(q);
+    return mf && ms;
+  });
+  var grid = document.getElementById('bizGrid');
+  var empty = document.getElementById('emptyState');
+  if (!grid) return;
+  if (filtered.length === 0) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  grid.innerHTML = filtered.map(function(b, i) {
+    var cat = b.category || 'Other';
+    var colors = CAT_COLORS[cat] || CAT_COLORS.Other;
+    var icon = CAT_ICONS[cat] || '📦';
+    var likes = b.likes ? Object.keys(b.likes).length : 0;
+    var iMine = currentUser && b.ownerId === currentUser.uid;
+    var iLiked = currentUser && b.likes && b.likes[currentUser.uid];
+    var delay = Math.min(i * 0.05, 0.3);
+    return '<div class="biz-card fade-up bg-gray-800 rounded-2xl overflow-hidden border border-gray-700 hover:border-pink-500" style="animation-delay:' + delay + 's;border-color:' + (iMine ? colors.accent : '') + '" onclick="openBizDetail(\'' + b.id + '\')">' +
+      // Banner / photo
+      (b.imageUrl
+        ? '<img src="' + b.imageUrl + '" style="width:100%;height:180px;object-fit:cover" onclick="event.stopPropagation();openImg(\'' + b.imageUrl + '\')">'
+        : '<div style="height:120px;background:' + colors.bg + ';display:flex;align-items:center;justify-content:center;font-size:56px">' + icon + '</div>') +
+      '<div style="padding:16px">' +
+        // Header row
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">' +
+          '<div style="flex:1">' +
+            '<h3 style="font-weight:800;font-size:17px">' + esc(b.name) + '</h3>' +
+            '<p style="font-size:12px;color:' + colors.accent + ';font-weight:700;margin-top:2px">' + icon + ' ' + cat + '</p>' +
+          '</div>' +
+          (iMine ? '<span style="background:#1f2937;color:#9ca3af;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;flex-shrink:0">My Business</span>' : '') +
+        '</div>' +
+        // Description
+        (b.description ? '<p style="font-size:13px;color:#9ca3af;margin-bottom:10px;line-height:1.6">' + esc(b.description).substring(0,120) + (b.description.length > 120 ? '…' : '') + '</p>' : '') +
+        // Price range
+        (b.priceRange ? '<p style="font-size:13px;color:#34d399;font-weight:700;margin-bottom:10px">💰 ' + esc(b.priceRange) + '</p>' : '') +
+        // Owner + time
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">' +
+          '<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">' + (b.ownerName||'?')[0].toUpperCase() + '</div>' +
+          '<span style="font-size:13px;color:#9ca3af;flex:1">' + esc(b.ownerName||'Student') + '</span>' +
+          '<span style="font-size:11px;color:#4b5563">' + tAgo(b.timestamp) + '</span>' +
+        '</div>' +
+        // Action row
+        '<div style="display:grid;grid-template-columns:auto auto 1fr 1fr;gap:8px;align-items:center" onclick="event.stopPropagation()">' +
+          // Like button
+          '<button class="like-btn" onclick="toggleLike(\'' + b.id + '\',\'' + (b.ownerId||'') + '\')" style="background:' + (iLiked?'#831843':'#1f2937') + ';border:1.5px solid ' + (iLiked?'#f472b6':'#374151') + ';color:' + (iLiked?'#f9a8d4':'#9ca3af') + ';font-weight:700;padding:10px 14px;border-radius:12px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px">' +
+            (iLiked?'❤️':'🤍') + ' <span>' + likes + '</span></button>' +
+          // Enquire button
+          '<button onclick="openEnquiryChat(\'' + b.id + '\',\'' + (b.ownerId||'') + '\',\'' + escQ(b.name) + '\',\'' + escQ(b.ownerName||'Owner') + '\')" style="background:#1e3a5f;color:#93c5fd;font-weight:700;padding:10px 12px;border-radius:12px;border:none;cursor:pointer;font-size:13px">💬 Enquire</button>' +
+          // WhatsApp
+          '<button onclick="whatsappBiz(\'' + escQ(b.phone||'') + '\',\'' + escQ(b.name) + '\')" style="background:#14532d;color:#86efac;font-weight:700;padding:10px 8px;border-radius:12px;border:none;cursor:pointer;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">📲</span>WhatsApp</button>' +
+          // Receipt / Pay
+          '<button onclick="showReceiptModal(\'' + b.id + '\',\'' + escQ(b.name) + '\',\'' + (b.ownerId||'') + '\',\'' + escQ(b.account||'') + '\')" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:700;padding:10px 8px;border-radius:12px;border:none;cursor:pointer;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">🧾</span>Receipt</button>' +
+        '</div>' +
+        (iMine ? '<button onclick="event.stopPropagation();deleteBiz(\'' + b.id + '\')" style="width:100%;margin-top:10px;background:#1f2937;color:#ef4444;font-size:12px;font-weight:600;padding:8px;border-radius:10px;border:none;cursor:pointer">🗑 Delete Listing</button>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderBiz();
+}
+// ── REGISTER MODAL ────────────────────────────────────────
+function showRegisterModal() {
+  pendingBizImg = null;
+  mkModal(
+    hdr('🏪 Register Your Business') +
+    '<div class="space-y-3">' +
+      fld('text','bName','Business Name *','e.g. Sullivan\'s Snacks') +
+      fld('text','bOwner','Your Name *','your full name') +
+      '<div><p style="font-size:12px;color:#9ca3af;font-weight:600;margin-bottom:8px">CATEGORY *</p>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">' +
+          ['Food','Fashion','Services','Tech','Beauty','Other'].map(function(c){
+            return '<button data-cat="'+c+'" onclick="selectCat(\''+c+'\',this)" style="padding:10px 6px;border-radius:12px;border:2px solid transparent;cursor:pointer;font-weight:600;font-size:12px;background:#1f2937;color:#9ca3af">'+CAT_ICONS[c]+' '+c+'</button>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
+      fld('text','bDesc','Description *','what do you sell/offer?') +
+      fld('text','bPrice','Price Range','e.g. ₦500 – ₦5,000') +
+      fld('text','bAcct','Bank Account Number','for receiving payment') +
+      fld('tel','bPhone','WhatsApp Number *','e.g. 08012345678') +
+      '<button onclick="pickBizImg()" id="bizImgBtn" style="width:100%;background:#1f2937;border:1.5px dashed #374151;color:#9ca3af;padding:14px;border-radius:16px;cursor:pointer;font-size:14px">📷 Add Business Photo</button>' +
+      '<div id="bizImgPrev" style="display:none;border-radius:12px;overflow:hidden;position:relative"><img id="bizImgThumb" style="width:100%;max-height:150px;object-fit:cover"><button onclick="clearBizImg()" style="position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;border:none;cursor:pointer">✕</button></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px">' +
+      '<button onclick="this.closest(\'.fixed\').remove()" style="background:#1f2937;color:#9ca3af;font-weight:600;padding:14px;border-radius:16px;border:1.5px solid #374151;cursor:pointer">Cancel</button>' +
+      '<button onclick="doRegisterBiz()" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:800;padding:14px;border-radius:16px;border:none;cursor:pointer">Register →</button>' +
+    '</div>'
+  );
+  setTimeout(function(){ var b=document.querySelector('[data-cat="Other"]'); if(b) selectCat('Other',b); },50);
+}
+var selectedCat = 'Other';
+function selectCat(c, btn) {
+  selectedCat = c;
+  document.querySelectorAll('[data-cat]').forEach(function(b){ b.style.borderColor='transparent'; b.style.color='#9ca3af'; });
+  btn.style.borderColor='#ec4899'; btn.style.color='#fff';
+}
+function pickBizImg() {
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=function(){
+    if(!inp.files[0])return;
+    var _f=inp.files[0];
+    if(typeof showFilePreview==='function'){
+      showFilePreview(_f,function(f){
+        pendingBizImg=f;
+        var r2=new FileReader();r2.onload=function(e){document.getElementById('bizImgPreview').src=e.target.result;document.getElementById('bizImgPrev').style.display='block';};r2.readAsDataURL(f);
+      });return;
+    }
+    pendingBizImg=_f;var r=new FileReader();r.onload=function(e){document.getElementById('bizImgPreview').src=e.target.result;document.getElementById('bizImgPrev').style.display='block';};r.readAsDataURL(_f);
+  };inp.click();
+}
+function clearBizImg(){pendingBizImg=null;document.getElementById('bizImgPrev').style.display='none';document.getElementById('bizImgBtn').style.display='block';}
+async function doRegisterBiz() {
+  var name  = (document.getElementById('bName')||{}).value||'';
+  var owner = (document.getElementById('bOwner')||{}).value||'';
+  var desc  = (document.getElementById('bDesc')||{}).value||'';
+  var price = (document.getElementById('bPrice')||{}).value||'';
+  var acct  = (document.getElementById('bAcct')||{}).value||'';
+  var phone = (document.getElementById('bPhone')||{}).value||'';
+  if(!name.trim()||!owner.trim()||!desc.trim()||!phone.trim()){showToast('Please fill all required fields','error');return;}
+  if(!currentUser){showToast('Please log in first','error');return;}
+  showLoading('Registering your business…');
+  var imgUrl=null;
+  if(pendingBizImg){var up=await uploadFile(pendingBizImg,'businesses');if(up.success)imgUrl=up.url;}
+  var res=await saveToFirebase('businesses',{
+    name:name.trim(), ownerName:owner.trim(), category:selectedCat,
+    description:desc.trim(), priceRange:price.trim(), account:acct.trim(),
+    phone:phone.trim().replace(/\s/g,''), imageUrl:imgUrl,
+    ownerId:currentUser.uid, timestamp:Date.now(), likes:{}, enquiries:0
+  });
+  hideLoading();
+  if(res.success){closeModals();showToast('🎉 Business registered! Everyone can see it now.');}
+  else showToast('Registration failed. Try again.','error');
+}
+// ── BUSINESS DETAIL ───────────────────────────────────────
+function openBizDetail(bizId) {
+  var b = allBiz.find(function(x){ return x.id===bizId; });
+  if (!b) return;
+  // Notify owner someone tapped their listing (not if it's themselves)
+  if (currentUser && b.ownerId && b.ownerId !== currentUser.uid) {
+    getUserName().then(function(viewerName) {
+      sendNotification(b.ownerId, '👀 ' + viewerName + ' just viewed your business "' + b.name + '"!');
+    });
+  }
+  var cat = b.category || 'Other';
+  var colors = CAT_COLORS[cat] || CAT_COLORS.Other;
+  var icon = CAT_ICONS[cat] || '📦';
+  var likes = b.likes ? Object.keys(b.likes).length : 0;
+  var iLiked = currentUser && b.likes && b.likes[currentUser.uid];
+  var modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 bg-black/90 overflow-y-auto';
+  modal.innerHTML =
+    '<div style="max-width:500px;margin:0 auto;min-height:100vh;background:#111827;position:relative">' +
+      // Top image / banner
+      (b.imageUrl
+        ? '<img src="'+b.imageUrl+'" style="width:100%;height:220px;object-fit:cover">'
+        : '<div style="height:160px;background:'+colors.bg+';display:flex;align-items:center;justify-content:center;font-size:72px">'+icon+'</div>') +
+      // Close button
+      '<button onclick="this.closest(\'.fixed\').remove()" style="position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;border:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">✕</button>' +
+      '<div style="padding:20px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">' +
+          '<h2 style="font-size:22px;font-weight:800">' + esc(b.name) + '</h2>' +
+          '<span style="background:'+colors.bg+';color:'+colors.accent+';font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;flex-shrink:0">'+icon+' '+cat+'</span>' +
+        '</div>' +
+        '<p style="color:#9ca3af;font-size:14px;line-height:1.7;margin-bottom:12px">' + esc(b.description||'') + '</p>' +
+        (b.priceRange ? '<div style="background:#1c2a1c;border-radius:12px;padding:10px 16px;margin-bottom:12px"><span style="color:#34d399;font-weight:700;font-size:14px">💰 '+esc(b.priceRange)+'</span></div>' : '') +
+        '<div style="background:#1f2937;border-radius:14px;padding:14px;margin-bottom:16px;space-y:8px">' +
+          dRow('👤 Owner', b.ownerName||'Student') +
+          dRow('📲 WhatsApp', b.phone||'Not provided') +
+          dRow('🏦 Account', b.account||'Contact owner') +
+          dRow('📅 Listed', tAgo(b.timestamp)) +
+          dRow('❤️ Likes', likes + ' people like this') +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '<button onclick="openEnquiryChat(\''+b.id+'\',\''+b.ownerId+'\',\''+escQ(b.name)+'\',\''+escQ(b.ownerName||'Owner')+'\')" style="background:#1e3a5f;color:#93c5fd;font-weight:700;padding:14px;border-radius:16px;border:none;cursor:pointer;font-size:14px">💬 Chat & Enquire</button>' +
+          '<button onclick="whatsappBiz(\''+escQ(b.phone||'')+'\',\''+escQ(b.name)+'\')" style="background:#14532d;color:#86efac;font-weight:700;padding:14px;border-radius:16px;border:none;cursor:pointer;font-size:14px">📲 WhatsApp</button>' +
+        '</div>' +
+        '<button onclick="showReceiptModal(\''+b.id+'\',\''+escQ(b.name)+'\',\''+b.ownerId+'\',\''+escQ(b.account||'')+'\')" style="width:100%;margin-top:10px;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:700;padding:14px;border-radius:16px;border:none;cursor:pointer;font-size:14px">🧾 Send Payment Receipt</button>' +
+        '<button onclick="toggleLike(\''+b.id+'\',\''+b.ownerId+'\')" style="width:100%;margin-top:10px;background:'+(iLiked?'#831843':'#1f2937')+';color:'+(iLiked?'#f9a8d4':'#9ca3af')+';font-weight:700;padding:12px;border-radius:16px;border:1.5px solid '+(iLiked?'#f472b6':'#374151')+';cursor:pointer;font-size:14px">'+(iLiked?'❤️ Liked!':'🤍 Like this business')+'</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+}
+function dRow(l,v){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #374151"><span style="color:#6b7280;font-size:13px">'+l+'</span><span style="font-weight:600;font-size:13px">'+esc(v||'')+'</span></div>'; }
+// ── LIKE / BOOST ─────────────────────────────────────────
+function toggleLike(bizId, ownerId) {
+  if (!currentUser) { showToast('Login to like','error'); return; }
+  var b = allBiz.find(function(x){ return x.id===bizId; });
+  if (!b) return;
+  var likeRef = db.ref('businesses/'+bizId+'/likes/'+currentUser.uid);
+  var isLiked = b.likes && b.likes[currentUser.uid];
+  if (isLiked) {
+    likeRef.remove();
+  } else {
+    likeRef.set(true);
+    // Notify owner
+    if (ownerId && ownerId !== currentUser.uid) {
+      getUserName().then(function(n){ sendNotification(ownerId, '❤️ '+n+' liked your business "'+b.name+'"!'); });
+    }
+  }
+}
+// ── ENQUIRY CHAT ─────────────────────────────────────────
+function openEnquiryChat(bizId, ownerId, bizName, ownerName) {
+  if (!currentUser) { showToast('Login required','error'); return; }
+  if (ownerId === currentUser.uid) { showToast("You own this business!",'error'); return; }
+  var chatId = [currentUser.uid, ownerId].sort().join('_') + '_biz';
+  // Notify owner someone is chatting
+  getUserName().then(function(n){ sendNotification(ownerId, '💬 '+n+' is enquiring about "'+bizName+'"'); });
+  var chatModal = document.createElement('div');
+  chatModal.className = 'fixed inset-0 z-[60] flex flex-col';
+  chatModal.style.background = '#0f172a';
+  chatModal.innerHTML =
+    '<div style="background:#1f2937;border-bottom:1px solid #374151;padding:14px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0">' +
+      '<button onclick="this.closest(\'.fixed\').remove()" style="width:38px;height:38px;border-radius:12px;background:#374151;border:none;cursor:pointer;color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center">←</button>' +
+      '<div style="flex:1">' +
+        '<p style="font-weight:800;font-size:15px">' + esc(ownerName) + '</p>' +
+        '<p style="font-size:12px;color:#a78bfa">Enquiry: ' + esc(bizName) + '</p>' +
+      '</div>' +
+      '<button onclick="whatsappBiz(\'\',\''+escQ(bizName)+'\')" style="background:#14532d;color:#86efac;font-weight:700;padding:8px 14px;border-radius:10px;border:none;cursor:pointer;font-size:12px">📲 WhatsApp</button>' +
+    '</div>' +
+    '<div id="eqMsgs" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px">' +
+      // Auto greeting
+      '<div style="text-align:center;padding:10px"><span style="background:#1f2937;color:#9ca3af;font-size:12px;padding:6px 14px;border-radius:20px">Chat about "'+esc(bizName)+'"</span></div>' +
+    '</div>' +
+    '<div style="padding:12px 16px;background:#1f2937;border-top:1px solid #374151;display:flex;gap:10px">' +
+      '<div style="flex:1;display:flex;align-items:center;background:#111827;border:1.5px solid #374151;border-radius:24px;padding:0 6px 0 16px" id="eqWrap">' +
+        '<input id="eqInp" placeholder="Ask about this business…" style="flex:1;background:none;border:none;outline:none;color:#fff;font-size:14px;padding:11px 4px" onkeydown="if(event.key===\'Enter\')sendEq(\''+chatId+'\',\''+escQ(bizName)+'\',\''+ownerId+'\')" onfocus="document.getElementById(\'eqWrap\').style.borderColor=\'#ec4899\'" onblur="document.getElementById(\'eqWrap\').style.borderColor=\'#374151\'">' +
+        '<button onclick="sendEq(\''+chatId+'\',\''+escQ(bizName)+'\',\''+ownerId+'\')" style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(chatModal);
+  db.ref('biz_chats/'+chatId).limitToLast(80).on('child_added', function(snap) {
+    var m = snap.val(); var mine = m.senderId === currentUser.uid;
+    var d = document.createElement('div');
+    d.style.cssText = 'display:flex;' + (mine ? 'justify-content:flex-end' : 'justify-content:flex-start');
+    d.innerHTML = '<div style="max-width:78%;padding:10px 14px;font-size:14px;color:#fff;' + (mine ? 'background:linear-gradient(135deg,#ec4899,#8b5cf6);border-radius:18px 18px 4px 18px' : 'background:#1f2937;border-radius:18px 18px 18px 4px') + '">' + esc(m.text) + '</div>';
+    var msgs = document.getElementById('eqMsgs');
+    if (msgs) { msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
+  });
+}
+async function sendEq(chatId, bizName, ownerId) {
+  var inp = document.getElementById('eqInp'); var text=(inp||{}).value||''; if(!text.trim())return;
+  inp.value='';
+  var sn = await getUserName();
+  db.ref('biz_chats/'+chatId).push({text:text,senderId:currentUser.uid,senderName:sn,timestamp:Date.now()});
+  sendNotification(ownerId,'💬 '+sn+': "'+text.substring(0,40)+'" (re: "'+bizName+'")');
+}
+// ── RECEIPT MODAL ─────────────────────────────────────────
+function showReceiptModal(bizId, bizName, ownerId, account) {
+  pendingReceiptImg = null;
+  mkModal(
+    hdr('🧾 Send Payment Receipt') +
+    '<p style="color:#9ca3af;font-size:14px;margin-bottom:16px">For: <strong style="color:#fff">' + esc(bizName) + '</strong></p>' +
+    (account ? '<div style="background:#1f2937;border-radius:12px;padding:12px 16px;margin-bottom:16px">' +
+      '<p style="font-size:12px;color:#6b7280;margin-bottom:4px">ACCOUNT NUMBER</p>' +
+      '<p style="font-weight:700;font-size:16px">' + esc(account) + '</p>' +
+    '</div>' : '') +
+    '<div style="background:#1e3a5f;border-radius:14px;padding:14px;margin-bottom:16px">' +
+      '<p style="font-size:13px;color:#93c5fd;font-weight:700;margin-bottom:6px">📋 Steps:</p>' +
+      '<p style="font-size:13px;color:#bfdbfe;line-height:1.7">1️⃣ Make your payment to the account above<br>2️⃣ Screenshot or photo your receipt<br>3️⃣ Upload it — owner gets notified instantly ✅</p>' +
+    '</div>' +
+    '<div id="rcptPrev" style="display:none;margin-bottom:12px;border-radius:12px;overflow:hidden;position:relative">' +
+      '<img id="rcptThumb" style="width:100%;max-height:140px;object-fit:cover">' +
+      '<div style="position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center"><span style="background:#16a34a;color:#fff;font-weight:700;padding:6px 16px;border-radius:20px;font-size:13px">✓ Receipt ready</span></div>' +
+    '</div>' +
+    '<button onclick="pickRcpt()" id="rcptBtn" style="width:100%;background:#1f2937;border:1.5px dashed #374151;color:#9ca3af;padding:14px;border-radius:16px;cursor:pointer;font-size:14px;margin-bottom:12px">📎 Upload Receipt / Screenshot</button>' +
+    '<input id="rcptNote" placeholder="Optional note to owner…" style="width:100%;background:#1f2937;border:1.5px solid #374151;border-radius:14px;padding:12px 16px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:16px" onfocus="this.style.borderColor=\'#ec4899\'" onblur="this.style.borderColor=\'#374151\'">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<button onclick="this.closest(\'.fixed\').remove()" style="background:#1f2937;color:#9ca3af;font-weight:600;padding:14px;border-radius:16px;border:1.5px solid #374151;cursor:pointer">Cancel</button>' +
+      '<button onclick="doSendRcpt(\''+bizId+'\',\''+escQ(bizName)+'\',\''+escQ(ownerId)+'\')" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:800;padding:14px;border-radius:16px;border:none;cursor:pointer">Send to Owner →</button>' +
+    '</div>'
+  );
+}
+function pickRcpt() {
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';
+  inp.onchange=function(){
+    if(!inp.files[0])return; pendingReceiptImg=inp.files[0];
+    var r=new FileReader();r.onload=function(e){
+      if(inp.files[0].type.startsWith('image/')){document.getElementById('rcptThumb').src=e.target.result;document.getElementById('rcptPrev').style.display='block';}
+      var b=document.getElementById('rcptBtn');if(b){b.textContent='✓ Receipt selected';b.style.borderColor='#16a34a';b.style.color='#86efac';}
+    };r.readAsDataURL(inp.files[0]);
+  };inp.click();
+}
+async function doSendRcpt(bizId, bizName, ownerId) {
+  if (!pendingReceiptImg) { showToast('Please upload your receipt first','error'); return; }
+  showLoading('Sending receipt to owner…');
+  var up = await uploadFile(pendingReceiptImg,'payments');
+  if (!up.success) { hideLoading(); showToast('Upload failed. Try again.','error'); return; }
+  var note = (document.getElementById('rcptNote')||{}).value||'';
+  var sn = await getUserName();
+  await saveToFirebase('businesses/'+bizId+'/receipts',{
+    buyerId:currentUser.uid,buyerName:sn,proofUrl:up.url,
+    note:note,timestamp:Date.now(),verified:false
+  });
+  sendNotification(ownerId,'🧾 '+sn+' sent a payment receipt for "'+bizName+'"!'+(note?' Note: '+note:''));
+  pendingReceiptImg=null; hideLoading(); closeModals();
+  showToast('✅ Receipt sent! Owner will contact you.');
+}
+// ── NOTIFICATIONS ─────────────────────────────────────────
+function showNotifs() {
+  // Mark all read
+  if (currentUser) {
+    myNotifs.forEach(function(n){
+      if (!n.read) db.ref('notifications/'+currentUser.uid+'/'+n.id).update({read:true});
+    });
+  }
+  var items = myNotifs.length === 0
+    ? '<div style="text-align:center;padding:30px;color:#6b7280;font-size:14px">No notifications yet 🔕</div>'
+    : myNotifs.slice(0,30).map(function(n){
+        return '<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #1f2937;align-items:flex-start">' +
+          '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">' +
+            (n.type==='book_purchase'?'🛒':n.message&&n.message.includes('liked')?'❤️':n.message&&n.message.includes('viewed')?'👀':'💬') +
+          '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<p style="font-size:13px;color:#e5e7eb;line-height:1.5">' + esc(n.message||'') + '</p>' +
+            (n.receiptUrl||n.proofUrl ? '<a href="'+(n.receiptUrl||n.proofUrl)+'" target="_blank" style="font-size:12px;color:#a78bfa;margin-top:4px;display:inline-block">📎 View receipt</a>' : '') +
+            '<p style="font-size:11px;color:#4b5563;margin-top:4px">' + tAgo(n.timestamp) + '</p>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+  mkModal(
+    hdr('🔔 Notifications') +
+    '<div style="max-height:65vh;overflow-y:auto">' + items + '</div>' +
+    '<button onclick="this.closest(\'.fixed\').remove()" style="width:100%;margin-top:16px;background:#1f2937;color:#9ca3af;font-weight:600;padding:14px;border-radius:16px;border:1.5px solid #374151;cursor:pointer">Close</button>'
+  );
+}
+// ── DELETE ────────────────────────────────────────────────
+function deleteBiz(bizId) {
+  _physioConfirm('This business listing will be permanently removed.', function(){
+    db.ref('businesses/'+bizId).remove();
+    showToast('Business deleted.');
+  }, null, {title:'Delete listing?', okText:'Delete', danger:true});
+}
+// ── HELPERS ───────────────────────────────────────────────
+function whatsappBiz(phone, bizName) {
+  if (!phone) { showToast('No WhatsApp number provided','error'); return; }
+  var c=phone.replace(/[^0-9]/g,''); if(c.startsWith('0')) c='234'+c.slice(1);
+  window.open('https://wa.me/'+c+'?text='+encodeURIComponent('Hi! I saw your business "'+bizName+'" on Physio SUAI. I\'d like to make an enquiry.'),'_blank');
+}
+async function getUserName() {
+  if (!currentUser) return 'Someone';
+  try { var s=await db.ref('users/'+currentUser.uid).once('value');var u=s.val();return (u&&u.name)?u.name:currentUser.email.split('@')[0]; }
+  catch(e){ return currentUser.email.split('@')[0]; }
+}
+function openImg(url){
+  var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;cursor:pointer';o.onclick=function(){o.remove();};
+  o.innerHTML='<img src="'+url+'" style="max-width:95vw;max-height:90vh;object-fit:contain;border-radius:12px">';
+  document.body.appendChild(o);
+}
+function mkModal(inner){
+  var m=document.createElement('div');m.className='fixed inset-0 z-50 bg-black/80 flex items-end';
+  m.addEventListener('click',function(e){if(e.target===m)m.remove();});
+  m.innerHTML='<div style="background:#111827;border-radius:24px 24px 0 0;padding:24px;width:100%;max-width:500px;margin:0 auto;max-height:92vh;overflow-y:auto">'+inner+'</div>';
+  document.body.appendChild(m); return m;
+}
+function closeModals(){document.querySelectorAll('.fixed.inset-0').forEach(function(m){if(!m.id||m.id!=='loadingOverlay')m.remove();});}
+function hdr(t){return '<div style="width:40px;height:4px;background:#374151;border-radius:2px;margin:0 auto 20px"></div><h2 style="font-size:20px;font-weight:800;margin-bottom:16px">'+t+'</h2>';}
+function fld(type,id,lbl,ph){return '<div><p style="font-size:12px;color:#9ca3af;font-weight:600;margin-bottom:6px">'+lbl+'</p><input type="'+type+'" id="'+id+'" placeholder="'+ph+'" style="width:100%;background:#1f2937;border:1.5px solid #374151;border-radius:14px;padding:12px 16px;color:#fff;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:2px" onfocus="this.style.borderColor=\'#ec4899\'" onblur="this.style.borderColor=\'#374151\'"></div>';}
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escQ(s){return (s||'').replace(/'/g,"\\'").replace(/"/g,'').substring(0,60);}
+function tAgo(ts){if(!ts)return '';var s=Math.floor((Date.now()-ts)/1000);if(s<60)return 'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+</script>
+<script>
+// Bug 5 fix: save & restore business page savepoint (scroll position)
+(function(){
+  var _sp_key = 'business';
+  var _sp_timer = null;
+  function _saveSP(){
+    if(typeof OfflineDB === 'undefined') return;
+    var scrollEl = document.documentElement || document.body;
+    OfflineDB.saveSavepoint(_sp_key, { scrollTop: scrollEl.scrollTop, savedAt: Date.now() });
+  }
+  function _debounceSave(){ clearTimeout(_sp_timer); _sp_timer = setTimeout(_saveSP, 800); }
+  function _restoreSP(){
+    if(typeof OfflineDB === 'undefined') return;
+    OfflineDB.getSavepoint(_sp_key).then(function(sp){
+      if(!sp || !sp.data || !sp.data.scrollTop) return;
+      setTimeout(function(){ (document.documentElement||document.body).scrollTop = sp.data.scrollTop; }, 600);
+    });
+  }
+  window.addEventListener('scroll', _debounceSave, { passive: true });
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveSP(); });
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _restoreSP);
+  else _restoreSP();
+})();
+</script>
+</body>
+</html>
