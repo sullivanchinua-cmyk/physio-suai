@@ -3,12 +3,12 @@ workflows:
     name: Physio SUAI – Android Release Build
     max_build_duration: 60
     environment:
-      android_signing:
-        - physio_suai_keystore
-      groups:
-        - physio_suai_env
       vars:
         PACKAGE_NAME: "com.physiosuai.app"
+        KEYSTORE_PATH: "keystore/physio-suai.jks"
+        KEY_ALIAS: "physiosuai"
+        KEYSTORE_PASSWORD: "1qaz0plm"
+        KEY_PASSWORD: "1qaz0plm"
       java: 17
 
     triggering:
@@ -27,51 +27,37 @@ workflows:
 
       - name: Set up Google Services JSON
         script: |
-          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
-
-      - name: Set keystore file
-        script: |
-          echo $CM_KEYSTORE | base64 --decode > $CM_KEYSTORE_PATH
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+          elif [ ! -f android/app/google-services.json ]; then
+            echo '{"project_info":{"project_number":"000000","project_id":"placeholder","storage_bucket":"placeholder.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000:android:000000","android_client_info":{"package_name":"com.physiosuai.app"}},"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' \
+              > android/app/google-services.json
+          fi
 
       - name: Install Node dependencies
         script: |
-          npm install
+          npm install --legacy-peer-deps
 
       - name: Sync Capacitor
         script: |
           npx cap sync android
 
-      - name: Build Android Release APK & AAB
+      - name: Make Gradle wrapper executable
+        script: |
+          chmod +x android/gradlew
+
+      - name: Build and sign Release APK & AAB
         script: |
           cd android
-          ./gradlew bundleRelease assembleRelease
-
-      - name: Sign the APK
-        script: |
-          cd android/app/build/outputs/apk/release
-          jarsigner \
-            -verbose \
-            -sigalg SHA256withRSA \
-            -digestalg SHA-256 \
-            -keystore $CM_KEYSTORE_PATH \
-            -storepass $CM_KEYSTORE_PASSWORD \
-            -keypass $CM_KEY_PASSWORD \
-            app-release-unsigned.apk "$CM_KEY_ALIAS"
-          zipalign -v 4 app-release-unsigned.apk physio-suai-release.apk
-
-      - name: Sign the AAB
-        script: |
-          jarsigner \
-            -verbose \
-            -sigalg SHA256withRSA \
-            -digestalg SHA-256 \
-            -keystore $CM_KEYSTORE_PATH \
-            -storepass $CM_KEYSTORE_PASSWORD \
-            -keypass $CM_KEY_PASSWORD \
-            android/app/build/outputs/bundle/release/app-release.aab "$CM_KEY_ALIAS"
+          ./gradlew assembleRelease bundleRelease \
+            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/$KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$KEY_PASSWORD \
+            --no-daemon
 
     artifacts:
-      - android/app/build/outputs/apk/release/physio-suai-release.apk
+      - android/app/build/outputs/apk/release/app-release.apk
       - android/app/build/outputs/bundle/release/app-release.aab
       - android/app/build/outputs/mapping/release/mapping.txt
 
