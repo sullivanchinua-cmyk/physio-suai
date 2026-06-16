@@ -9,7 +9,7 @@ workflows:
         KEY_ALIAS: "physiosuai"
         KEYSTORE_PASSWORD: "1qaz0plm"
         KEY_PASSWORD: "1qaz0plm"
-      java: 17
+      java: 21
 
     triggering:
       events:
