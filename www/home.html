@@ -1,15 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
-    <!-- Capacitor runtime -->
-    <script src="capacitor.js"></script>
-    <!-- Physio SUAI Capacitor modules -->
-    <script src="js/capacitor-bridge.js"></script>
-    <script src="js/dexie-offline.js"></script>
-    <script src="js/alarm-manager.js"></script>
-    <script src="js/background-audio.js"></script>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>Home - Physio SUAI</title>
@@ -806,22 +797,22 @@ function showFilePreview(file, onSend) {
         // Check auth - use user.uid directly to avoid race with hybrid-config.js
         auth.onAuthStateChanged(async (user) => {
             if (!user) {
-                // Firebase briefly fires null before restoring persisted auth on Android.
-                // If we just came from login, wait 8 s; otherwise 4 s.
+                // Firebase briefly fires null before restoring persisted auth on Android/WebView.
+                // Guard: if we just came from a successful login, wait up to 8 s before giving up.
                 if (window._homeAuthGuardPending) return;
                 window._homeAuthGuardPending = true;
-                var _waitMs = sessionStorage.getItem('_physio_authed') ? 8000 : 4000;
+                var _waitMs = localStorage.getItem('_physio_authed') ? 8000 : 4000;
                 setTimeout(function() {
                     window._homeAuthGuardPending = false;
                     if (!firebase.auth().currentUser) {
-                        sessionStorage.removeItem('_physio_authed');
+                        localStorage.removeItem('_physio_authed');
                         window.location.href = 'index.html';
                     }
                 }, _waitMs);
                 return;
             }
             window._homeAuthGuardPending = false;
-            sessionStorage.removeItem('_physio_authed');
+            localStorage.removeItem('_physio_authed');
             // Pass uid directly - don't rely on global currentUser being set yet
             const profile = await getUserProfile(user.uid);
             if (profile && profile.name) {
@@ -1835,9 +1826,10 @@ function showFilePreview(file, onSend) {
             if (trimmed && typeof firebase !== 'undefined' && firebase.auth().currentUser) {
               var _u = firebase.auth().currentUser;
               var _photo = (window.currentUserData&&window.currentUserData.photoURL)||null;
-              var _init  = (_u.displayName||'?')[0].toUpperCase();
+              var _cdName = (window.currentUserData&&window.currentUserData.name)||_u.displayName||'Student';
+              var _init  = _cdName[0].toUpperCase();
               firebase.database().ref('typing/public_chat/'+_u.uid).set({
-                name: _u.displayName||'Someone', initial:_init, photo:_photo,
+                name: _cdName, initial:_init, photo:_photo,
                 recording:false, ts: Date.now()
               });
               clearTimeout(window._homeTypingTimer);
@@ -2363,7 +2355,7 @@ function showFilePreview(file, onSend) {
             if (finalMsg) {
               var mentionMatches = finalMsg.match(/@(\w+)/g);
               if (mentionMatches && typeof sendMentionNotification === 'function') {
-                var senderName = currentUser ? (currentUser.displayName || 'Someone') : 'Someone';
+                var senderName = (window.currentUserData&&window.currentUserData.name)||(currentUser?(currentUser.displayName||'Someone'):'Someone');
                 mentionMatches.forEach(function(m) {
                   sendMentionNotification(m.slice(1), senderName, finalMsg);
                 });

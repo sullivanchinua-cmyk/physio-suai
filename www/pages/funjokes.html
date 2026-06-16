@@ -1,15 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
-    <!-- Capacitor runtime (injected by build) -->
-    <script src="../capacitor.js"></script>
-    <!-- Physio SUAI Capacitor modules -->
-    <script src="../js/capacitor-bridge.js"></script>
-    <script src="../js/dexie-offline.js"></script>
-    <script src="../js/alarm-manager.js"></script>
-    <script src="../js/background-audio.js"></script>
-
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Fun Jokes – Physio SUAI</title>
@@ -1038,17 +1029,9 @@ function doSend() {
   }
 
   // Handle special text (poll/event/location)
-  // Bug 6 fix: helper to check online status
-  var _fjOnline = window.CordovaNetwork ? window.CordovaNetwork.isOnline() : navigator.onLine;
-
   if (_pendingText && !_pending) {
-    var _spTxt = _pendingText; _pendingText = null; clearPending();
-    if (!_fjOnline && typeof OfflineDB !== 'undefined') {
-      OfflineDB.saveLocalMessage('fun_chat', { text:_spTxt, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
-    } else {
-      db.ref('fun_chat').push({ text:_spTxt, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
-    }
-    return;
+    db.ref('fun_chat').push({ text:_pendingText, sender:'Anonymous', sessionId:_anonId, ts:Date.now() });
+    _pendingText = null; clearPending(); return;
   }
   inp.value = ''; _hasContent = false; updateMicSend(); closeEmoji();
   var finalText = _pendingText ? (_pendingText + (text?' \n'+text:'')) : (text || '📎 File');
@@ -1063,23 +1046,16 @@ function doSend() {
     });
   } else {
     if(!window._fjChatHistory) window._fjChatHistory=[];
-    window._fjChatHistory.push(finalText);
-    if(window._fjChatHistory.length>12) window._fjChatHistory.shift();
-    var msgObj = { text:finalText, sender:'Anonymous', sessionId:_anonId, ts:Date.now() };
-    if (_fjReplyTo) { msgObj.replyTo = _fjReplyTo; fjClearReply(); }
-    // Bug 6 fix: queue locally if offline
-    if (!_fjOnline && typeof OfflineDB !== 'undefined') {
-      OfflineDB.saveLocalMessage('fun_chat', msgObj);
-      if(finalText.toLowerCase().includes('@gemini')){
-        setTimeout(function(){ GeminiChat.check(finalText, window._fjChatHistory); }, 150);
-      }
-    } else {
-      var ref2 = db.ref('fun_chat').push(msgObj);
-      if(finalText.toLowerCase().includes('@gemini')){
-        setTimeout(function(){ GeminiChat.check(finalText, window._fjChatHistory); }, 150);
-      }
-      ref2.then ? ref2.then(function(){ _myMsgIds.add(ref2.key); }) : _myMsgIds.add(ref2.key);
-    }
+  window._fjChatHistory.push(finalText);
+  if(window._fjChatHistory.length>12) window._fjChatHistory.shift();
+  var msgObj = { text:finalText, sender:'Anonymous', sessionId:_anonId, ts:Date.now() };
+  if (_fjReplyTo) { msgObj.replyTo = _fjReplyTo; fjClearReply(); }
+  var ref2 = db.ref('fun_chat').push(msgObj);
+  // @gemini check
+  if(finalText.toLowerCase().includes('@gemini')){
+    setTimeout(function(){ GeminiChat.check(finalText, window._fjChatHistory); }, 150);
+  }
+    ref2.then ? ref2.then(function(){ _myMsgIds.add(ref2.key); }) : _myMsgIds.add(ref2.key);
   }
 }
 // Allow poll/event/location to send directly
@@ -2854,34 +2830,5 @@ window._anonSetExpiry = function(val) {
 <script>initChatTheme("funjokes");
   setTimeout(function(){ if(typeof refreshExpiredUrls==="function") refreshExpiredUrls("public_chat"); }, 3000);
   if (typeof refreshExpiredUrls === "function") { setTimeout(function(){ refreshExpiredUrls("public_chat_jokes"); }, 3000); }</script>
-<script>
-// Bug 5 fix: save & restore funjokes page savepoint (chat scroll position)
-(function(){
-  var _sp_key = 'funjokes';
-  var _sp_timer = null;
-  function _saveSP(){
-    if(typeof OfflineDB === 'undefined') return;
-    var msgsEl = document.getElementById('msgs');
-    var scrollTop = msgsEl ? msgsEl.scrollTop : 0;
-    OfflineDB.saveSavepoint(_sp_key, { scrollTop: scrollTop, savedAt: Date.now() });
-  }
-  function _debounceSave(){ clearTimeout(_sp_timer); _sp_timer = setTimeout(_saveSP, 800); }
-  function _restoreSP(){
-    if(typeof OfflineDB === 'undefined') return;
-    OfflineDB.getSavepoint(_sp_key).then(function(sp){
-      if(!sp || !sp.data || !sp.data.scrollTop) return;
-      setTimeout(function(){
-        var msgsEl = document.getElementById('msgs');
-        if(msgsEl) msgsEl.scrollTop = sp.data.scrollTop;
-      }, 800);
-    });
-  }
-  var msgsEl = document.getElementById('msgs');
-  if(msgsEl) msgsEl.addEventListener('scroll', _debounceSave, { passive: true });
-  document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveSP(); });
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _restoreSP);
-  else setTimeout(_restoreSP, 600);
-})();
-</script>
 </body>
 </html>

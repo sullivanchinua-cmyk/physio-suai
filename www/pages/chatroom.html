@@ -1,15 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
-    <!-- Capacitor runtime (injected by build) -->
-    <script src="../capacitor.js"></script>
-    <!-- Physio SUAI Capacitor modules -->
-    <script src="../js/capacitor-bridge.js"></script>
-    <script src="../js/dexie-offline.js"></script>
-    <script src="../js/alarm-manager.js"></script>
-    <script src="../js/background-audio.js"></script>
-
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Chat – Physio SUAI</title>
@@ -417,7 +408,7 @@ function _openCameraWebRTC() {
 
   function startCam(mode) {
     if (stream) stream.getTracks().forEach(function(t){ t.stop(); });
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false })
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: true })
       .then(function(s) { stream = s; vid.srcObject = s; })
       .catch(function() {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false })
@@ -555,27 +546,6 @@ function _openLocationUI() {
     _lat = null; _lng = null;
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(_gotLocation, function(){}, { enableHighAccuracy: true, timeout: 12000 });
   };
-  // Try Capacitor Geolocation first — it requests proper Android permission
-  var _CapGeo = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
-  if (_CapGeo) {
-    var _doCapGeo = function() {
-      _CapGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 12000 }).then(_gotLocation).catch(function() {
-        var ae = document.getElementById('_aLocAccuracy');
-        if (ae) ae.textContent = 'Could not get location — enable GPS';
-      });
-    };
-    _CapGeo.checkPermissions().then(function(p) {
-      if (p.location === 'granted' || p.coarseLocation === 'granted') { _doCapGeo(); }
-      else {
-        _CapGeo.requestPermissions({ permissions: ['location', 'coarseLocation'] }).then(_doCapGeo).catch(function() {
-          var ae = document.getElementById('_aLocAccuracy');
-          if (ae) ae.textContent = 'Location permission denied — enable in Settings';
-        });
-      }
-    }).catch(_doCapGeo);
-    return;
-  }
-  // Web Geolocation API fallback
   if (!navigator.geolocation) {
     var accEl = document.getElementById('_aLocAccuracy');
     if (accEl) accEl.textContent = 'GPS not available on this device';
@@ -583,7 +553,7 @@ function _openLocationUI() {
   }
   navigator.geolocation.getCurrentPosition(_gotLocation, function() {
     var accEl = document.getElementById('_aLocAccuracy');
-    if (accEl) accEl.textContent = 'Could not get location — enable GPS in Settings';
+    if (accEl) accEl.textContent = 'Could not get location — enable GPS';
   }, { enableHighAccuracy: true, timeout: 12000 });
 }
 
@@ -777,33 +747,6 @@ function _openContactPicker() {
         '<div style="width:56px;height:56px;border-radius:50%;border:3px solid #9333ea;border-top:3px solid transparent;animation:spin .8s linear infinite"></div>' +
         '<p style="color:#a78bfa;font-size:14px;font-weight:600;margin:0">Requesting permission...</p>' +
       '</div>';
-
-    /* ── Capacitor Contacts plugin (@capacitor-community/contacts) ── */
-    var _CapCt = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Contacts;
-    if (_CapCt) {
-      _CapCt.checkPermissions().then(function(p) {
-        var doLoad = function() {
-          _CapCt.getContacts({projection:{name:true,phones:true,image:true}}).then(function(r){
-            _phoneContacts = (r.contacts||[]).map(function(c){
-              return {
-                name: (c.name && c.name.display) || (c.name && (c.name.given||'') + ' ' + (c.name.family||'')).trim() || 'Unknown',
-                phone: (c.phones && c.phones[0]) ? c.phones[0].number : '',
-                email: (c.emails && c.emails[0]) ? c.emails[0].address : ''
-              };
-            }).filter(function(c){ return c.phone; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
-            _phoneLoaded = true;
-            _renderList(_phoneContacts);
-          }).catch(function(){ _phoneLoaded = true; _phoneContacts = []; _renderList([]); });
-        };
-        if (p.contacts === 'granted') { doLoad(); }
-        else {
-          _CapCt.requestPermissions().then(doLoad).catch(function(){
-            _phoneLoaded = true; _phoneContacts = []; _renderList([]);
-          });
-        }
-      }).catch(function(){ _phoneLoaded = true; _phoneContacts = []; _renderList([]); });
-      return;
-    }
 
     /* ── Expo Contacts bridge (React Native / Expo) ── */
     if (window.ExpoContacts) {
@@ -1386,33 +1329,12 @@ function loadWallpaper() {
   // Nothing to do here — keeping function for backward compat.
 }
 
-// ═══ KEYBOARD FIX — keep input bar above Android keyboard ═══════
-(function() {
-  var _lastKBH = 0;
-  function _applyKB() {
-    if (!window.visualViewport) return;
-    var kbh = Math.max(0, window.innerHeight - window.visualViewport.height - (window.visualViewport.offsetTop || 0));
-    if (Math.abs(kbh - _lastKBH) < 5) return;
-    _lastKBH = kbh;
-    var ib = document.getElementById('inputBar');
-    var msgs = document.getElementById('msgs');
-    if (kbh > 50) {
-      if (ib) { ib.style.position='fixed'; ib.style.bottom=kbh+'px'; ib.style.left='0'; ib.style.right='0'; ib.style.zIndex='500'; }
-      if (msgs) msgs.style.paddingBottom = (kbh + 80) + 'px';
-    } else {
-      if (ib) { ib.style.position=''; ib.style.bottom=''; ib.style.left=''; ib.style.right=''; ib.style.zIndex=''; }
-      if (msgs) msgs.style.paddingBottom = '';
-    }
-    window.scrollTo(0, 0);
-    setTimeout(scrollBottom, 80);
-  }
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', _applyKB);
-    window.visualViewport.addEventListener('scroll', function() { window.scrollTo(0, 0); });
-  }
-  var inp = document.getElementById('msgInp');
-  if (inp) { inp.addEventListener('focus', function() { setTimeout(scrollBottom, 400); }); }
-})();
+// ═══ KEYBOARD FIX ═══════════════════════════════════════════════
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function() {
+    window.scrollTo(0,0); scrollBottom();
+  });
+}
 
 // ═══ MENU ═══════════════════════════════════════════════════════
 function toggleMenu() {
@@ -2599,21 +2521,7 @@ function doSend() {
     var f=_pending;clearPending();
     _sendFileWithWaBubble(f, msgData, chatId);
   } else {
-    // Bug 6 fix: if offline, save locally and sync when connection returns
-    var isOnline = window.CordovaNetwork ? window.CordovaNetwork.isOnline() : navigator.onLine;
-    if (!isOnline && typeof OfflineDB !== 'undefined') {
-      OfflineDB.saveLocalMessage(chatId, msgData).then(function(){
-        showToast('📶 Saved offline — will send when reconnected', 'info');
-      });
-    } else {
-      db.ref('chats/'+chatId).push(msgData).catch(function(err){
-        // Firebase push failed despite online check; fall back to local queue
-        if (typeof OfflineDB !== 'undefined') {
-          OfflineDB.saveLocalMessage(chatId, msgData);
-          showToast('📶 Saved offline — will retry when reconnected', 'info');
-        }
-      });
-    }
+    db.ref('chats/'+chatId).push(msgData);
   }
   scrollBottom();
 }
@@ -4184,21 +4092,5 @@ if (typeof GeminiChat !== 'undefined') {
 }
 </script>
 
-
-  <script>
-  document.addEventListener('DOMContentLoaded',function(){
-    if(typeof firebase==='undefined'||!firebase.apps||!firebase.apps.length) return;
-    firebase.database().ref('messages/chatroom_global').limitToLast(1).on('child_added',function(snap){
-      var msg=snap.val(); if(!msg) return;
-      if(window.currentUser&&msg.senderId===window.currentUser.uid) return;
-      if(document.hidden&&window.AlarmManager){
-        AlarmManager.showChatNotification({title:msg.senderName||'Classroom Chat',body:msg.text||'New message',page:'pages/chatroom.html',chatId:'chatroom_global'});
-      } else if(window.AlarmManager) {
-        AlarmManager.showInAppBanner(msg.senderName||'Classroom Chat',msg.text||'','');
-      }
-      if(window.OfflineDB) OfflineDB.cacheRemoteMessage('chatroom_global',msg);
-    });
-  });
-  </script>
 </body>
 </html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+  <title>School Portal – Physio SUAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- No aws4fetch needed: upload uses built-in crypto.subtle -->
+  <script src="../js/hybrid-config.js"></script>
+  <script src="../js/file-preview.js"></script>
+  <script src="../js/attach-menu.js"></script>
+  <script src="../js/chat-theme.js"></script>
+  <script src="../js/ai-api.js"></script>
+  <style>
+    body,html{height:100%;margin:0;overflow-x:hidden}
+    .portal-btn{transition:all .2s;cursor:pointer}
+    .portal-btn:active{transform:scale(.96)}
+    #webview{width:100%;border:none;flex:1;min-height:0}
+  </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col" style="height:100dvh">
+  <!-- NAV -->
+  <nav class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex-shrink-0">
+    <div class="flex items-center gap-3 max-w-4xl mx-auto">
+      <button onclick="goBack()"
+        class="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center text-xl hover:bg-gray-600 flex-shrink-0">←</button>
+      <h1 id="navTitle" class="font-bold flex-1 text-center">🎓 ESUT Portal</h1>
+      <button onclick="refreshView()"
+        class="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center hover:bg-gray-600 flex-shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>
+    </div>
+    <div id="urlBarRow" class="hidden max-w-4xl mx-auto mt-2 flex gap-2">
+      <div class="flex-1 bg-gray-700 rounded-xl px-4 py-2 text-sm text-gray-300 truncate" id="urlBar">portal.esut.edu.ng</div>
+      <button onclick="openDirect()" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-xl text-sm font-semibold transition flex-shrink-0">↗ Browser</button>
+    </div>
+      <div style="position:relative;flex-shrink:0">
+      <button onclick="document.getElementById('schoolDotMenu').style.display=document.getElementById('schoolDotMenu').style.display==='none'?'block':'none'" style="width:36px;height:36px;background:#374151;border-radius:10px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </button>
+      <div id="schoolDotMenu" style="display:none;position:absolute;right:0;top:42px;background:#1f2937;border:1px solid #374151;border-radius:14px;padding:6px;min-width:180px;z-index:50;box-shadow:0 8px 30px #000b">
+        <button onclick="document.getElementById('schoolDotMenu').style.display='none';if(typeof initChatTheme==='function'){initChatTheme('school');__ct.open();}" style="display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;cursor:pointer;padding:12px 14px;color:#fff;font-size:15px;border-radius:10px">🎨 Chat theme</button>
+      </div>
+    </div>
+</nav>
+  <!-- LAUNCHER (default view) -->
+  <div id="launcher" class="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-start gap-5">
+    <div class="text-center pt-2">
+      <div class="text-7xl mb-3">🎓</div>
+      <h2 class="text-2xl font-bold">ESUT Student Portal</h2>
+      <p class="text-gray-500 text-sm mt-1">portal.esut.edu.ng</p>
+    </div>
+    <div class="w-full max-w-sm space-y-3">
+      <!-- Primary: In-App proxy loader -->
+      <button onclick="loadProxy()" class="portal-btn w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 text-white font-bold py-4 rounded-2xl flex items-center gap-4 px-5 shadow-lg shadow-pink-900/30">
+        <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">🔓</div>
+        <div class="text-left">
+          <p class="font-bold text-lg">Open Portal In-App</p>
+          <p class="text-xs font-normal opacity-80">Loads here directly – no redirect loop</p>
+        </div>
+      </button>
+      <!-- Browser fallback -->
+      <button onclick="openDirect()" class="portal-btn w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 rounded-2xl flex items-center gap-4 px-5">
+        <div class="w-12 h-12 bg-gray-600 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">🌐</div>
+        <div class="text-left">
+          <p class="font-bold text-lg">Open in Browser</p>
+          <p class="text-xs font-normal text-gray-400">Standard browser experience</p>
+        </div>
+      </button>
+      <div class="grid grid-cols-3 gap-2 pt-1">
+        <button onclick="loadShortcut('student/results.aspx')" class="portal-btn bg-blue-700/60 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl text-sm flex flex-col items-center gap-1">
+          <span class="text-2xl">📊</span>Results
+        </button>
+        <button onclick="loadShortcut('student/coursereg.aspx')" class="portal-btn bg-green-700/60 hover:bg-green-700 text-white font-semibold py-3 rounded-xl text-sm flex flex-col items-center gap-1">
+          <span class="text-2xl">📚</span>Courses
+        </button>
+        <button onclick="loadShortcut('student/fees.aspx')" class="portal-btn bg-yellow-700/60 hover:bg-yellow-700 text-white font-semibold py-3 rounded-xl text-sm flex flex-col items-center gap-1">
+          <span class="text-2xl">💳</span>Fees
+        </button>
+      </div>
+    </div>
+    <div class="w-full max-w-sm bg-gray-800 rounded-2xl p-4 text-sm text-gray-400 space-y-2">
+      <p class="font-semibold text-white">💡 Tips</p>
+      <p>• <span class="text-pink-400 font-medium">In-App</span> mode strips redirect loops so you can log in without leaving the app</p>
+      <p>• If it still shows blank, tap ↺ to retry or use <span class="text-white font-medium">Open in Browser</span></p>
+    </div>
+  </div>
+  <!-- PROXY VIEWER -->
+  <div id="proxyView" class="hidden flex-1 flex flex-col" style="min-height:0">
+    <div id="proxyLoading" class="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
+      <div class="w-14 h-14 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-gray-400 text-lg font-semibold">Connecting to ESUT Portal…</p>
+      <p class="text-gray-600 text-sm">Stripping redirect security…</p>
+    </div>
+    <iframe id="webview" class="hidden border-none" style="flex:1;min-height:0;width:100%"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-top-navigation-by-user-activation"></iframe>
+    <div id="proxyError" class="hidden flex-1 flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <div class="text-6xl">⚠️</div>
+      <h3 class="font-bold text-xl">Portal Blocked Embedding</h3>
+      <p class="text-gray-400 text-sm">ESUT's security prevented in-app loading. Use the browser instead.</p>
+      <button onclick="openDirect()" class="bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3 px-8 rounded-2xl">
+        Open in Browser 🌐
+      </button>
+      <button onclick="showLauncher()" class="text-gray-500 text-sm">← Back to Portal Menu</button>
+    </div>
+  </div>
+  <script src="../js/main.js"></script>
+  <script>
+    var BASE_URL = 'https://portal.esut.edu.ng/';
+    var LOGIN_URL = BASE_URL + 'login.aspx';
+    var PROXY = 'https://corsproxy.io/?';
+    var inProxy = false;
+    function goBack() {
+      if (inProxy) showLauncher();
+      else location.href = '../home.html';
+    }
+    function showLauncher() {
+      inProxy = false;
+      document.getElementById('launcher').classList.remove('hidden');
+      document.getElementById('proxyView').classList.add('hidden');
+      document.getElementById('urlBarRow').classList.add('hidden');
+      document.getElementById('navTitle').textContent = '🎓 ESUT Portal';
+      // Stop iframe
+      try { document.getElementById('webview').src = 'about:blank'; } catch(e){}
+    }
+    function loadProxy() { fetchAndInject(LOGIN_URL); }
+    function loadShortcut(path) { fetchAndInject(BASE_URL + path); }
+    function fetchAndInject(targetUrl) {
+      inProxy = true;
+      document.getElementById('launcher').classList.add('hidden');
+      document.getElementById('proxyView').classList.remove('hidden');
+      document.getElementById('proxyLoading').classList.remove('hidden');
+      document.getElementById('proxyError').classList.add('hidden');
+      document.getElementById('webview').classList.add('hidden');
+      document.getElementById('urlBarRow').classList.remove('hidden');
+      document.getElementById('urlBar').textContent = targetUrl.replace('https://','');
+      fetch(PROXY + encodeURIComponent(targetUrl), { signal: AbortSignal.timeout(15000) })
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then(function(html) {
+          // ── Patch the HTML to kill frame-busting scripts ──
+          var base = targetUrl.substring(0, targetUrl.lastIndexOf('/') + 1);
+          var patched = html
+            .replace(/<head([^>]*)>/i, '<head$1><base href="' + BASE_URL + '">')
+            // Kill all common frame-busting patterns
+            .replace(/top\.location(\s*=|\s*\.href\s*=)/g, '//BLOCKED top.location=')
+            .replace(/parent\.location(\s*=|\s*\.href\s*=)/g, '//BLOCKED parent.location=')
+            .replace(/window\.top\.location/g, '//BLOCKED window.top.location')
+            .replace(/if\s*\(\s*(?:top|window\.top)\s*!={1,2}\s*(?:self|window\.self)\s*\)/g, 'if(false)')
+            .replace(/if\s*\(\s*window\s*!=\s*(?:top|window\.top)\s*\)/g, 'if(false)')
+            .replace(/window\.top\s*!==?\s*window/g, 'false')
+            // Fix relative form actions
+            .replace(/action="(?!http|javascript|#)([^"]+)"/g, function(m,p) {
+              return 'action="' + PROXY + encodeURIComponent(BASE_URL + p.replace(/^\//,'')) + '"';
+            });
+          var frame = document.getElementById('webview');
+          frame.srcdoc = patched;
+          frame.classList.remove('hidden');
+          frame.style.flex = '1';
+          document.getElementById('proxyLoading').classList.add('hidden');
+        })
+        .catch(function(err) {
+          console.error('Portal load failed:', err);
+          document.getElementById('proxyLoading').classList.add('hidden');
+          document.getElementById('proxyError').classList.remove('hidden');
+        });
+    }
+    function openDirect() { window.open(LOGIN_URL, '_blank'); }
+    function refreshView() {
+      if (inProxy) loadProxy();
+      // else: already on launcher, nothing to refresh
+    }
+  </script>
+</body>
+</html>

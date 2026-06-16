@@ -190,6 +190,7 @@ function _openNativeContacts(){
   }
   var Contacts=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Contacts;
   if(Contacts){
+    // Capacitor native contacts (Android app)
     Contacts.checkPermissions().then(function(p){
       var doLoad=function(){
         Contacts.getContacts({projection:{name:true,phones:true,image:true}}).then(function(r){
@@ -200,7 +201,19 @@ function _openNativeContacts(){
       if(p.contacts==='granted')doLoad();
       else Contacts.requestPermissions().then(doLoad).catch(function(){ov.querySelector('#_cLoad').textContent='Permission denied.';});
     }).catch(function(){ ov.querySelector('#_cLoad').textContent='Contacts not available.'; });
-  } else { ov.querySelector('#_cLoad').textContent='Contacts plugin not available on this platform.'; }
+  } else if(navigator.contacts && navigator.contacts.select) {
+    // Web Contact Picker API (Chrome for Android PWA fallback)
+    ov.querySelector('#_cLoad').textContent='Opening contact picker…';
+    navigator.contacts.select(['name','tel'],{multiple:true}).then(function(results){
+      all=(results||[]).flatMap(function(c){
+        var name=(c.name&&c.name[0])||'Unknown';
+        return (c.tel||[]).map(function(tel){ return {displayName:name,phoneNumber:tel,photoURI:null}; });
+      }).filter(function(c){return c.phoneNumber;});
+      renderContacts(all);
+    }).catch(function(err){
+      ov.querySelector('#_cLoad').textContent='Contact access denied or unavailable.';
+    });
+  } else { ov.querySelector('#_cLoad').textContent='Contacts not available on this device.'; }
   var si=ov.querySelector('#_cSrch');
   if(si) si.addEventListener('input',function(){ var q=si.value.toLowerCase(); renderContacts(q?all.filter(function(c){return(c.displayName||'').toLowerCase().includes(q)||(c.phoneNumber||'').includes(q);}):all); });
 }

@@ -37,8 +37,20 @@
       });
       push.on('registration', function(data) {
         window.FCM_TOKEN = data.registrationId;
-        if (window.db && window.currentUser) {
-          db.ref('fcm_tokens/'+currentUser.uid).set({ token: data.registrationId, platform:'android', updatedAt: Date.now() });
+        // Save token immediately if user is ready, otherwise retry after auth
+        function _saveFcmToken() {
+          if (window.db && window.currentUser) {
+            window.db.ref('fcm_tokens/'+window.currentUser.uid).set({
+              token: data.registrationId, platform: 'android', updatedAt: Date.now()
+            });
+          }
+        }
+        _saveFcmToken();
+        // Also hook into Firebase auth state in case auth isn't ready yet
+        if (typeof firebase !== 'undefined' && firebase.auth) {
+          firebase.auth().onAuthStateChanged(function(user) {
+            if (user && data.registrationId) _saveFcmToken();
+          });
         }
       });
       push.on('notification', function(data) {

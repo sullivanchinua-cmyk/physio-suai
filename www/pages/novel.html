@@ -1,15 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-
-    <!-- Capacitor runtime (injected by build) -->
-    <script src="../capacitor.js"></script>
-    <!-- Physio SUAI Capacitor modules -->
-    <script src="../js/capacitor-bridge.js"></script>
-    <script src="../js/dexie-offline.js"></script>
-    <script src="../js/alarm-manager.js"></script>
-    <script src="../js/background-audio.js"></script>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Novels - Physio SUAI</title>
@@ -42,30 +33,6 @@
             if (file) { const success = await submitNovel(file.file); if (success) loadNovels(document.getElementById('novelsGrid')); }
         }
         loadNovels(document.getElementById('novelsGrid'));
-    </script>
-    <script>
-    // Bug 5 fix: save & restore novel page savepoint (scroll position)
-    (function(){
-      var _sp_key = 'novel';
-      var _sp_timer = null;
-      function _saveSP(){
-        if(typeof OfflineDB === 'undefined') return;
-        var scrollEl = document.documentElement || document.body;
-        OfflineDB.saveSavepoint(_sp_key, { scrollTop: scrollEl.scrollTop, savedAt: Date.now() });
-      }
-      function _debounceSave(){ clearTimeout(_sp_timer); _sp_timer = setTimeout(_saveSP, 800); }
-      function _restoreSP(){
-        if(typeof OfflineDB === 'undefined') return;
-        OfflineDB.getSavepoint(_sp_key).then(function(sp){
-          if(!sp || !sp.data || !sp.data.scrollTop) return;
-          setTimeout(function(){ (document.documentElement||document.body).scrollTop = sp.data.scrollTop; }, 800);
-        });
-      }
-      window.addEventListener('scroll', _debounceSave, { passive: true });
-      document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveSP(); });
-      if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _restoreSP);
-      else _restoreSP();
-    })();
     </script>
 </body>
 </html>
