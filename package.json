@@ -1,0 +1,30 @@
+{
+  "name": "physio-suai",
+  "version": "1.0.0",
+  "description": "Physio SUAI Student App by Sullivan",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo built",
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/contacts": "^7.2.0",
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/camera": "^8.2.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/device": "^8.0.2",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/geolocation": "^8.2.0",
+    "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@odion-cloud/capacitor-mediastore": "^1.0.21",
+    "libsodium-wrappers": "^0.8.4",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  }
+}
