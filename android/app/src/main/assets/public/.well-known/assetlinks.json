@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "app.netlify.delightful_swan_564752.twa",
+    "sha256_cert_fingerprints": ["26:D8:43:35:3F:3F:63:BA:36:A7:9F:FF:42:E7:E4:ED:D1:EC:17:9C:43:B5:DE:06:65:8F:CD:AF:3B:56:26:67"]
+  }
+}]

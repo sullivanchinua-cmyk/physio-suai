@@ -1,0 +1,98 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "$uid === auth.uid"
+      }
+    },
+
+    "friends": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "friend_requests": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "auth != null"
+      }
+    },
+
+    "chats": {
+      "$chatId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".indexOn": ["ts", "senderUid"]
+      }
+    },
+
+    "chat_pins": {
+      "$chatId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "fun_chat": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["ts"]
+    },
+
+    "stories": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["expires", "ts", "uid"]
+    },
+
+    "assignments": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp", "authorId"]
+    },
+
+    "novels": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp", "authorId"]
+    },
+
+    "books": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp", "sellerId"]
+    },
+
+    "businesses": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp", "ownerId"]
+    },
+
+    "lectures": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp", "time"]
+    },
+
+    "notifications": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "auth != null",
+        ".indexOn": ["timestamp", "read"]
+      }
+    },
+
+    "public_chat": {
+      ".read": true,
+      ".write": "auth != null",
+      ".indexOn": ["timestamp"]
+    }
+  }
+}

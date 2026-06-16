@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <!-- Capacitor runtime (injected by build) -->
+    <script src="../capacitor.js"></script>
+    <!-- Physio SUAI Capacitor modules -->
+    <script src="../js/capacitor-bridge.js"></script>
+    <script src="../js/dexie-offline.js"></script>
+    <script src="../js/alarm-manager.js"></script>
+    <script src="../js/background-audio.js"></script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chats – Physio SUAI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- No aws4fetch needed: upload uses built-in crypto.subtle -->
+  <script src="../js/hybrid-config.js"></script>
+  <script src="../js/main.js"></script>
+  <script src="../js/confirm-modal.js"></script>
+  <script src="../js/chat-theme.js"></script>
+  <style>
+    .tab-btn{padding:10px 16px;border-radius:12px;font-weight:600;font-size:13px;transition:all .2s}
+    .tab-btn.active{background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;box-shadow:0 4px 14px #ec489960}
+    .tab-btn:not(.active){background:#1f2937;color:#9ca3af}
+    .story-ring{background:linear-gradient(135deg,#ec4899,#f97316);padding:2.5px;border-radius:50%}
+    .friend-card{transition:all .15s}
+    .friend-card:active{transform:scale(.97)}
+    .badge{min-width:20px;height:20px;border-radius:10px;background:#ec4899;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .fade-up{animation:fadeUp .25s ease both}
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col">
+
+  <!-- NAV -->
+  <nav class="bg-gray-800 border-b border-gray-700 sticky top-0 z-40 px-4 py-3">
+    <div class="max-w-2xl mx-auto flex items-center justify-between">
+      <button onclick="location.href='../home.html'" style="width:48px;height:48px;background:linear-gradient(135deg,#ec4899,#8b5cf6);border-radius:14px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 3px 10px rgba(147,51,234,.4)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <div class="text-center">
+        <h1 class="font-bold text-lg">💬 Chats</h1>
+        <p class="text-xs text-green-400">🔒 End-to-end encrypted</p>
+      </div>
+      <button onclick="showAddFriend()" class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center hover:opacity-90">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+      </button>
+    </div>
+    <div class="max-w-2xl mx-auto flex gap-2 mt-3">
+      <button id="tabChats" class="tab-btn active flex-1" onclick="switchTab('chats')">💬 Chats</button>
+      <button id="tabStories" class="tab-btn flex-1" onclick="switchTab('stories')">📸 Stories</button>
+      <button id="tabRequests" class="tab-btn flex-1 flex items-center justify-center gap-1" onclick="switchTab('requests')">
+        🔔 Requests <span id="reqBadge" class="badge hidden">0</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- CHATS TAB -->
+  <div id="tabChatsView" class="flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full space-y-3">
+    <div id="friendsList">
+      <div class="flex flex-col items-center justify-center mt-16 gap-4 text-center">
+        <div class="text-6xl">👥</div>
+        <p class="text-gray-400 font-semibold">No friends yet</p>
+        <p class="text-gray-600 text-sm">Tap + to browse and add friends</p>
+        <button onclick="showAddFriend()" class="bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3 px-6 rounded-2xl">Add a Friend</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STORIES TAB -->
+  <div id="tabStoriesView" class="hidden flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full">
+    <button onclick="addStory()" class="w-full mb-4 bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 text-lg transition active:scale-95 shadow-lg shadow-pink-900/30">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Post Story / Reel
+    </button>
+    <div id="storiesList" class="grid grid-cols-2 gap-4"></div>
+  </div>
+
+  <!-- REQUESTS TAB -->
+  <div id="tabRequestsView" class="hidden flex-1 overflow-y-auto p-4 max-w-2xl mx-auto w-full space-y-3">
+    <div id="requestsList">
+      <div class="flex flex-col items-center justify-center mt-16 gap-3 text-center">
+        <div class="text-6xl">🔔</div>
+        <p class="text-gray-400">No pending friend requests</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD FRIEND MODAL – Browse All Users -->
+  <div id="addFriendModal" class="hidden fixed inset-0 z-50 bg-black/80 flex flex-col" onclick="if(event.target===this)closeAddFriend()">
+    <div class="bg-gray-900 w-full max-w-lg mx-auto rounded-t-3xl flex flex-col mt-auto" style="max-height:88vh">
+      <div class="px-5 pt-5 pb-3 border-b border-gray-700 flex-shrink-0">
+        <div class="w-10 h-1 bg-gray-600 rounded mx-auto mb-4"></div>
+        <h2 class="font-bold text-xl text-center mb-3">👥 Find Friends</h2>
+        <div class="flex items-center gap-2 bg-gray-800 rounded-2xl px-4 py-3 border border-gray-700">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="userSearchInput" type="text" placeholder="Search by name…" class="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-500 text-sm" oninput="filterUsers()">
+        </div>
+      </div>
+      <div id="allUsersList" class="overflow-y-auto flex-1 p-4 space-y-2"></div>
+      <div class="px-5 pb-6 flex-shrink-0">
+        <button onclick="closeAddFriend()" class="w-full bg-gray-800 text-gray-400 py-3 rounded-2xl hover:text-white transition font-semibold">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE MODAL -->
+  <div id="profileModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-end" onclick="if(event.target===this)closeProfile()">
+    <div class="bg-gray-800 w-full max-w-lg mx-auto rounded-t-3xl p-6 space-y-4">
+      <div class="w-10 h-1 bg-gray-600 rounded mx-auto mb-2"></div>
+      <div class="flex justify-center">
+        <div id="pmAvatar" class="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold text-4xl"></div>
+      </div>
+      <div class="text-center">
+        <h2 id="pmName" class="text-2xl font-bold"></h2>
+        <p id="pmBio" class="text-gray-400 text-sm mt-1"></p>
+        <p id="pmEmail" class="text-gray-500 text-xs mt-1"></p>
+        <p class="text-green-400 text-xs mt-2">🔒 End-to-end encrypted</p>
+      </div>
+      <button id="pmChat" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3 rounded-2xl">💬 Open Chat</button>
+      <button onclick="closeProfile()" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-2xl">Close</button>
+    </div>
+  </div>
+
+  <!-- STORY VIEWER -->
+  <div id="storyViewer" class="hidden fixed inset-0 z-50 bg-black flex flex-col">
+    <div class="flex gap-1 px-4 pt-3">
+      <div id="storyProgress" class="h-1 flex-1 bg-white/30 rounded overflow-hidden">
+        <div id="storyBar" class="h-full bg-white w-0 transition-none"></div>
+      </div>
+    </div>
+    <div class="flex items-center justify-between px-4 py-3">
+      <div class="flex items-center gap-3">
+        <div id="svAvatar" class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center font-bold"></div>
+        <div><p id="svName" class="font-semibold text-sm"></p><p id="svTime" class="text-xs text-gray-400"></p></div>
+      </div>
+      <button onclick="event.stopPropagation();closeStoryViewer()" class="text-white text-3xl leading-none">✕</button>
+    </div>
+    <div class="flex-1 flex items-center justify-center px-4">
+      <img id="svImg" class="max-w-full max-h-full rounded-xl object-contain" src="" style="display:none">
+      <video id="svVid" class="max-w-full max-h-full rounded-xl" controls style="display:none"></video>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loadingOverlay" class="hidden fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
+    <div class="text-center">
+      <div class="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <p class="loading-text text-white mt-3 font-medium">Loading…</p>
+    </div>
+  </div>
+
+  <script>
+    var _allUsers = [];
+    var _myFriendUids = new Set();
+    var _sentRequestUids = new Set();
+
+    function switchTab(tab) {
+      ['Chats','Stories','Requests'].forEach(function(t) {
+        document.getElementById('tab'+t).classList.remove('active');
+        document.getElementById('tab'+t+'View').classList.add('hidden');
+      });
+      var key = tab.charAt(0).toUpperCase()+tab.slice(1);
+      document.getElementById('tab'+key).classList.add('active');
+      document.getElementById('tab'+key+'View').classList.remove('hidden');
+      if (tab==='stories') loadStories();
+      if (tab==='requests') loadRequests();
+    }
+
+    // ── FRIENDS ──────────────────────────────────────────────────────────
+    function loadFriends() {
+      if (!currentUser) return;
+      db.ref('friends/'+currentUser.uid).on('value', function(snap) {
+        var friends = [];
+        _myFriendUids.clear();
+        snap.forEach(function(c) { friends.push({id:c.key,...c.val()}); _myFriendUids.add(c.key); });
+        var list = document.getElementById('friendsList');
+        if (!friends.length) {
+          list.innerHTML = '<div class="flex flex-col items-center justify-center mt-16 gap-4 text-center"><div class="text-6xl">👥</div><p class="text-gray-400 font-semibold">No friends yet</p><p class="text-gray-600 text-sm">Tap + to browse and add friends</p><button onclick="showAddFriend()" class="bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold py-3 px-6 rounded-2xl">Add a Friend</button></div>';
+          return;
+        }
+        list.innerHTML = '';
+        friends.forEach(function(f) {
+          db.ref('users/'+f.friendUid).once('value').then(function(us) {
+            var u = us.val(); if (!u) return;
+            var div = document.createElement('div');
+            div.className = 'friend-card flex items-center gap-4 bg-gray-800 rounded-2xl p-4 fade-up';
+            div.innerHTML =
+              '<div class="w-14 h-14 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">'+esc(u.name[0].toUpperCase())+'</div>'+
+              '<div class="flex-1 min-w-0">'+
+                '<p class="font-bold truncate">'+esc(u.name)+'</p>'+
+                '<p class="text-xs text-green-400">🔒 E2E Encrypted</p>'+
+                '<p class="text-sm text-gray-400 truncate">'+(u.bio||'Physio SUAI Member')+'</p>'+
+              '</div>'+
+              '<div class="flex gap-2">'+
+                '<button onclick="openProfile(\''+f.friendUid+'\',\''+escQ(u.name)+'\')" class="w-10 h-10 rounded-xl bg-gray-700 hover:bg-gray-600 flex items-center justify-center flex-shrink-0">'+
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>'+
+                '</button>'+
+                '<button onclick="location.href=\'chatroom.html?uid='+f.friendUid+'&name='+encodeURIComponent(u.name)+'\'" class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center flex-shrink-0">'+
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>'+
+                '</button>'+
+              '</div>';
+            list.appendChild(div);
+          });
+        });
+      });
+    }
+
+    function openProfile(uid, name) {
+      db.ref('users/'+uid).once('value').then(function(s) {
+        var u = s.val()||{};
+        document.getElementById('pmAvatar').textContent = (u.name||name)[0].toUpperCase();
+        document.getElementById('pmName').textContent = u.name||name;
+        document.getElementById('pmBio').textContent = u.bio||'Physio SUAI Member';
+        document.getElementById('pmEmail').textContent = u.email||'';
+        document.getElementById('pmChat').onclick = function(){ location.href='chatroom.html?uid='+uid+'&name='+encodeURIComponent(u.name||name); };
+        document.getElementById('profileModal').classList.remove('hidden');
+      });
+    }
+    function closeProfile(){ document.getElementById('profileModal').classList.add('hidden'); }
+
+    // ── ADD FRIEND – BROWSE ALL USERS ─────────────────────────────────────
+    function showAddFriend() {
+      document.getElementById('addFriendModal').classList.remove('hidden');
+      document.getElementById('userSearchInput').value = '';
+      var list = document.getElementById('allUsersList');
+      list.innerHTML = '<div class="text-center py-8"><div class="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div><p class="text-gray-400 text-sm mt-2">Loading users…</p></div>';
+      // Load sent requests first
+      db.ref('friend_requests').once('value').then(function(reqSnap) {
+        _sentRequestUids.clear();
+        reqSnap.forEach(function(targetNode) {
+          if (targetNode.child(currentUser.uid).exists()) _sentRequestUids.add(targetNode.key);
+        });
+        db.ref('users').once('value').then(function(snap) {
+          _allUsers = [];
+          snap.forEach(function(c) {
+            if (c.key === currentUser.uid) return;
+            _allUsers.push({uid:c.key,...c.val()});
+          });
+          renderUserList(_allUsers);
+        });
+      });
+    }
+    function closeAddFriend(){ document.getElementById('addFriendModal').classList.add('hidden'); }
+
+    function renderUserList(users) {
+      var list = document.getElementById('allUsersList');
+      if (!users.length) { list.innerHTML='<p class="text-center text-gray-500 py-8">No users found</p>'; return; }
+      list.innerHTML = users.map(function(u,i) {
+        var isFriend = _myFriendUids.has(u.uid);
+        var sentReq = _sentRequestUids.has(u.uid);
+        var btn;
+        var chatBtn = '<button onclick="closeAddFriend();location.href=\'chatroom.html?uid='+u.uid+'&name='+encodeURIComponent(u.name||'Friend')+'\'" style="background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;font-weight:700;padding:8px 12px;border-radius:12px;border:none;cursor:pointer;font-size:12px;white-space:nowrap">💬</button>';
+        if (isFriend) {
+          btn = chatBtn;
+        } else if (sentReq) {
+          // Already sent request — still allow direct chat
+          btn = '<div style="display:flex;gap:6px;align-items:center">' +
+            '<span style="background:#374151;color:#6b7280;font-weight:700;padding:8px 10px;border-radius:12px;font-size:12px;white-space:nowrap">✉️ Sent</span>' +
+            chatBtn + '</div>';
+        } else {
+          // Not yet friends — show Add + Chat buttons side by side
+          btn = '<div style="display:flex;gap:6px">' +
+            '<button onclick="sendRequest(\''+u.uid+'\',\''+escQ(u.name||'User')+'\')" style="background:#374151;color:#fff;font-weight:700;padding:8px 10px;border-radius:12px;border:none;cursor:pointer;font-size:12px;white-space:nowrap">➕ Add</button>' +
+            chatBtn + '</div>';
+        }
+        return '<div class="flex items-center gap-3 bg-gray-800 rounded-2xl p-3 fade-up" style="animation-delay:'+Math.min(i*0.04,0.3)+'s">'+
+          '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0">'+(u.name||'?')[0].toUpperCase()+'</div>'+
+          '<div style="flex:1;min-width:0">'+
+            '<p style="font-weight:700;font-size:14px">'+esc(u.name||'User')+'</p>'+
+            '<p style="font-size:12px;color:#6b7280">'+(u.bio||'Physio SUAI Member')+'</p>'+
+          '</div>'+btn+
+        '</div>';
+      }).join('');
+    }
+
+    function filterUsers() {
+      var q = document.getElementById('userSearchInput').value.toLowerCase();
+      renderUserList(q ? _allUsers.filter(function(u){ return (u.name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q); }) : _allUsers);
+    }
+
+    function sendRequest(targetUid, targetName) {
+      db.ref('friend_requests/'+targetUid+'/'+currentUser.uid).set({
+        fromUid: currentUser.uid, fromName: currentUser.displayName||'A Student',
+        fromEmail: currentUser.email, ts: Date.now()
+      }).then(function() {
+        showToast('Friend request sent to '+targetName+' ✅');
+        _sentRequestUids.add(targetUid); filterUsers();
+      });
+    }
+
+    // ── REQUESTS ─────────────────────────────────────────────────────────
+    function loadRequests() {
+      db.ref('friend_requests/'+currentUser.uid).once('value').then(function(snap) {
+        var reqs = []; snap.forEach(function(c){ reqs.push({id:c.key,...c.val()}); });
+        document.getElementById('reqBadge').textContent = reqs.length;
+        document.getElementById('reqBadge').classList.toggle('hidden', !reqs.length);
+        var list = document.getElementById('requestsList');
+        if (!reqs.length) { list.innerHTML='<div class="flex flex-col items-center justify-center mt-16 gap-3 text-center"><div class="text-6xl">🔔</div><p class="text-gray-400">No pending requests</p></div>'; return; }
+        list.innerHTML = reqs.map(function(r) {
+          return '<div class="bg-gray-800 rounded-2xl p-4 flex items-center gap-3 fade-up">'+
+            '<div class="w-12 h-12 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">'+r.fromName[0].toUpperCase()+'</div>'+
+            '<div class="flex-1 min-w-0"><p class="font-semibold truncate">'+esc(r.fromName)+'</p><p class="text-xs text-gray-400 truncate">'+esc(r.fromEmail)+'</p></div>'+
+            '<div class="flex gap-2">'+
+              '<button onclick="acceptReq(\''+r.fromUid+'\',\''+escQ(r.fromName)+'\')" class="bg-green-500 text-white px-3 py-2 rounded-xl text-sm font-bold active:scale-95">✓ Accept</button>'+
+              '<button onclick="declineReq(\''+r.fromUid+'\')" class="bg-gray-600 text-white px-3 py-2 rounded-xl text-sm font-bold active:scale-95">✕</button>'+
+            '</div></div>';
+        }).join('');
+      });
+    }
+
+    function acceptReq(fromUid, fromName) {
+      var upd = {};
+      upd['friends/'+currentUser.uid+'/'+fromUid] = {friendUid:fromUid, since:Date.now()};
+      upd['friends/'+fromUid+'/'+currentUser.uid] = {friendUid:currentUser.uid, since:Date.now()};
+      upd['friend_requests/'+currentUser.uid+'/'+fromUid] = null;
+      db.ref().update(upd).then(function() {
+        showToast('🎉 You and '+fromName+' are now friends!');
+        _myFriendUids.add(fromUid); loadRequests(); switchTab('chats');
+      });
+    }
+    function declineReq(fromUid) { db.ref('friend_requests/'+currentUser.uid+'/'+fromUid).remove().then(function(){ showToast('Request declined.'); loadRequests(); }); }
+
+    // ── STORIES ──────────────────────────────────────────────────────────
+    function addStory() {
+      var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*';
+      inp.onchange=function(){
+        if(!inp.files[0]) return;
+        showLoading('Uploading story…');
+        uploadFile(inp.files[0],'stories').then(function(res){
+          if(!res.success){hideLoading();showToast('Upload failed','error');return;}
+          db.ref('stories').push({uid:currentUser.uid,name:currentUser.displayName||'Student',url:res.url,fileKey:res.key||null,type:inp.files[0].type,ts:Date.now(),expires:Date.now()+(24*60*60*1000)}).then(function(){
+            hideLoading(); showToast('Story posted! ✅'); loadStories();
+          });
+        });
+      }; inp.click();
+    }
+
+    function loadStories() {
+      // Refresh any expired story URLs first (stories use same R2 signed URLs)
+      if (typeof refreshExpiredUrls === 'function') refreshExpiredUrls('stories');
+      db.ref('stories').orderByChild('expires').startAt(Date.now()).once('value').then(function(snap) {
+        var list=document.getElementById('storiesList'), stories=[];
+        snap.forEach(function(c){ stories.push({id:c.key,...c.val()}); });
+        if(!stories.length){list.innerHTML='<p class="col-span-2 text-center text-gray-500 text-sm mt-8">No stories yet. Be the first! 📸</p>';return;}
+        list.innerHTML=stories.reverse().map(function(s){
+          var isImg=s.type&&s.type.startsWith('image');
+          var thumb=isImg?'<img src="'+s.url+'" class="w-full h-full object-cover">'
+            :'<div class="w-full h-full flex items-center justify-center text-5xl bg-gray-900">▶️</div>';
+          var isOwn=s.uid===currentUser.uid;
+          return '<div class="relative rounded-2xl overflow-hidden bg-gray-800 cursor-pointer active:scale-95 transition" style="aspect-ratio:9/16" onclick="viewStory(\''+s.url+'\',\''+s.type+'\',\''+s.name+'\','+s.ts+',\''+s.id+'\')">'
+            +thumb+'<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>'
+            +'<div class="absolute top-3 left-3"><div class="story-ring"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-xs font-bold">'+s.name[0].toUpperCase()+'</div></div></div>'
+            +(isOwn?'<button onclick="deleteStory(event,\''+s.id+'\')" class="absolute top-2 right-2 bg-red-500/80 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold">✕</button>':'')
+            +'<div class="absolute bottom-3 left-3 right-3"><p class="text-sm font-semibold truncate">'+s.name+'</p><p class="text-xs text-gray-300">'+timeAgo(s.ts)+'</p></div></div>';
+        }).join('');
+      });
+    }
+
+    function deleteStory(e,id){e.stopPropagation();_physioConfirm('This story will be permanently deleted.', function(){db.ref('stories/'+id).remove().then(function(){showToast('Deleted');loadStories();});}, null, {title:'Delete story?', okText:'Delete', danger:true});}
+
+    var _storyTimer=null;
+    function viewStory(url,type,name,ts){
+      document.getElementById('svAvatar').textContent=name[0].toUpperCase();
+      document.getElementById('svName').textContent=name;
+      document.getElementById('svTime').textContent=timeAgo(ts);
+      var img=document.getElementById('svImg'),vid=document.getElementById('svVid');
+      if(type&&type.startsWith('video')){img.style.display='none';vid.style.display='';vid.src=url;vid.play().catch(function(){});}
+      else{vid.style.display='none';img.style.display='';img.src=url;}
+      document.getElementById('storyViewer').classList.remove('hidden');
+      var bar=document.getElementById('storyBar');bar.style.transition='none';bar.style.width='0%';
+      setTimeout(function(){bar.style.transition='width 5s linear';bar.style.width='100%';},50);
+      if(_storyTimer)clearTimeout(_storyTimer);
+      _storyTimer=setTimeout(closeStoryViewer,5000);
+    }
+    function closeStoryViewer(){
+      document.getElementById('storyViewer').classList.add('hidden');
+      var v=document.getElementById('svVid');v.pause();v.src='';
+      if(_storyTimer){clearTimeout(_storyTimer);_storyTimer=null;}
+      document.getElementById('storyBar').style.width='0%';
+    }
+
+    function timeAgo(ts){var s=Math.floor((Date.now()-ts)/1000);if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
+    function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    function escQ(s){return(s||'').replace(/'/g,"\\'").substring(0,60);}
+
+    auth.onAuthStateChanged(function(user){
+      if(user){
+        loadFriends();
+        db.ref('friend_requests/'+user.uid).on('value',function(s){
+          var count=0;s.forEach(function(){count++;});
+          document.getElementById('reqBadge').textContent=count;
+          document.getElementById('reqBadge').classList.toggle('hidden',!count);
+        });
+        // Refresh expired R2 URLs for stories
+        setTimeout(function(){ if(typeof refreshExpiredUrls==='function') refreshExpiredUrls('stories'); }, 3000);
+      } else { location.href='../index.html'; }
+    });
+  </script>
+
+  <script>
+  document.addEventListener('DOMContentLoaded',function(){
+    if(typeof firebase==='undefined'||!firebase.apps||!firebase.apps.length) return;
+    if(!window.currentUser) return;
+    firebase.database().ref('private_messages').on('child_added',function(snap){
+      var msg=snap.val(); if(!msg) return;
+      if(msg.to!==window.currentUser.uid) return;
+      if(document.hidden&&window.AlarmManager){
+        AlarmManager.showChatNotification({title:msg.fromName||'Private Message',body:msg.text||'New message',page:'pages/chat.html'});
+        try{new Audio('../sounds/notification.mp3').play().catch(function(){});}catch(e){}
+      }
+    });
+  });
+  </script>
+</body>
+</html>

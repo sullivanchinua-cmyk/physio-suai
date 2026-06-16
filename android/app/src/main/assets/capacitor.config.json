@@ -1,0 +1,32 @@
+{
+	"appId": "com.physiosuai.app",
+	"appName": "Physio SUAI",
+	"webDir": "www",
+	"bundledWebRuntime": false,
+	"android": {
+		"allowMixedContent": true,
+		"captureInput": true,
+		"webContentsDebuggingEnabled": false
+	},
+	"plugins": {
+		"LocalNotifications": {
+			"smallIcon": "ic_stat_icon_config_sample",
+			"iconColor": "#EC4899",
+			"sound": "alarm.wav",
+			"channelName": "Physio SUAI Notifications",
+			"channelDescription": "Push and local notifications for Physio SUAI"
+		},
+		"Camera": {
+			"presentationStyle": "fullscreen"
+		},
+		"Geolocation": {
+			"requestPermissions": true
+		},
+		"SplashScreen": {
+			"launchShowDuration": 2500,
+			"backgroundColor": "#111827",
+			"showSpinner": false,
+			"androidSpinnerStyle": "large"
+		}
+	}
+}
