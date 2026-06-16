@@ -806,17 +806,22 @@ function showFilePreview(file, onSend) {
         // Check auth - use user.uid directly to avoid race with hybrid-config.js
         auth.onAuthStateChanged(async (user) => {
             if (!user) {
-                // Firebase on Android briefly fires null before restoring persisted auth.
-                // Wait 3 s so the cached session can reload before redirecting.
+                // Firebase briefly fires null before restoring persisted auth on Android.
+                // If we just came from login, wait 8 s; otherwise 4 s.
                 if (window._homeAuthGuardPending) return;
                 window._homeAuthGuardPending = true;
+                var _waitMs = sessionStorage.getItem('_physio_authed') ? 8000 : 4000;
                 setTimeout(function() {
                     window._homeAuthGuardPending = false;
-                    if (!firebase.auth().currentUser) window.location.href = 'index.html';
-                }, 3000);
+                    if (!firebase.auth().currentUser) {
+                        sessionStorage.removeItem('_physio_authed');
+                        window.location.href = 'index.html';
+                    }
+                }, _waitMs);
                 return;
             }
             window._homeAuthGuardPending = false;
+            sessionStorage.removeItem('_physio_authed');
             // Pass uid directly - don't rely on global currentUser being set yet
             const profile = await getUserProfile(user.uid);
             if (profile && profile.name) {

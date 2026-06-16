@@ -555,6 +555,27 @@ function _openLocationUI() {
     _lat = null; _lng = null;
     if (navigator.geolocation) navigator.geolocation.getCurrentPosition(_gotLocation, function(){}, { enableHighAccuracy: true, timeout: 12000 });
   };
+  // Try Capacitor Geolocation first — it requests proper Android permission
+  var _CapGeo = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Geolocation;
+  if (_CapGeo) {
+    var _doCapGeo = function() {
+      _CapGeo.getCurrentPosition({ enableHighAccuracy: true, timeout: 12000 }).then(_gotLocation).catch(function() {
+        var ae = document.getElementById('_aLocAccuracy');
+        if (ae) ae.textContent = 'Could not get location — enable GPS';
+      });
+    };
+    _CapGeo.checkPermissions().then(function(p) {
+      if (p.location === 'granted' || p.coarseLocation === 'granted') { _doCapGeo(); }
+      else {
+        _CapGeo.requestPermissions({ permissions: ['location', 'coarseLocation'] }).then(_doCapGeo).catch(function() {
+          var ae = document.getElementById('_aLocAccuracy');
+          if (ae) ae.textContent = 'Location permission denied — enable in Settings';
+        });
+      }
+    }).catch(_doCapGeo);
+    return;
+  }
+  // Web Geolocation API fallback
   if (!navigator.geolocation) {
     var accEl = document.getElementById('_aLocAccuracy');
     if (accEl) accEl.textContent = 'GPS not available on this device';
@@ -562,7 +583,7 @@ function _openLocationUI() {
   }
   navigator.geolocation.getCurrentPosition(_gotLocation, function() {
     var accEl = document.getElementById('_aLocAccuracy');
-    if (accEl) accEl.textContent = 'Could not get location — enable GPS';
+    if (accEl) accEl.textContent = 'Could not get location — enable GPS in Settings';
   }, { enableHighAccuracy: true, timeout: 12000 });
 }
 
@@ -756,6 +777,33 @@ function _openContactPicker() {
         '<div style="width:56px;height:56px;border-radius:50%;border:3px solid #9333ea;border-top:3px solid transparent;animation:spin .8s linear infinite"></div>' +
         '<p style="color:#a78bfa;font-size:14px;font-weight:600;margin:0">Requesting permission...</p>' +
       '</div>';
+
+    /* ── Capacitor Contacts plugin (@capacitor-community/contacts) ── */
+    var _CapCt = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Contacts;
+    if (_CapCt) {
+      _CapCt.checkPermissions().then(function(p) {
+        var doLoad = function() {
+          _CapCt.getContacts({projection:{name:true,phones:true,image:true}}).then(function(r){
+            _phoneContacts = (r.contacts||[]).map(function(c){
+              return {
+                name: (c.name && c.name.display) || (c.name && (c.name.given||'') + ' ' + (c.name.family||'')).trim() || 'Unknown',
+                phone: (c.phones && c.phones[0]) ? c.phones[0].number : '',
+                email: (c.emails && c.emails[0]) ? c.emails[0].address : ''
+              };
+            }).filter(function(c){ return c.phone; }).sort(function(a,b){ return a.name.localeCompare(b.name); });
+            _phoneLoaded = true;
+            _renderList(_phoneContacts);
+          }).catch(function(){ _phoneLoaded = true; _phoneContacts = []; _renderList([]); });
+        };
+        if (p.contacts === 'granted') { doLoad(); }
+        else {
+          _CapCt.requestPermissions().then(doLoad).catch(function(){
+            _phoneLoaded = true; _phoneContacts = []; _renderList([]);
+          });
+        }
+      }).catch(function(){ _phoneLoaded = true; _phoneContacts = []; _renderList([]); });
+      return;
+    }
 
     /* ── Expo Contacts bridge (React Native / Expo) ── */
     if (window.ExpoContacts) {

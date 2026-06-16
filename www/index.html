@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+  <title>Physio SUAI – By SULLIVAN</title>
+  <!-- Capacitor runtime (present after build) -->
+  <script src="capacitor.js"></script>
+  <!-- Physio SUAI Capacitor modules -->
+  <script src="js/capacitor-bridge.js"></script>
+  <script src="js/dexie-offline.js"></script>
+  <script src="js/alarm-manager.js"></script>
+  <script src="js/background-audio.js"></script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- Service Worker -->
+  <script>if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});</script>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ec4899">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse2{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+    .anim-up{animation:fadeUp .7s ease-out both}
+    .anim-pulse{animation:pulse2 2s ease-in-out infinite}
+    .grad-text{background:linear-gradient(135deg,#ec4899,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .glass{background:rgba(17,24,39,.88);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.07)}
+  </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 min-h-screen text-white overflow-x-hidden">
+
+  <!-- INTRO -->
+  <div id="intro" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-purple-900 via-pink-900 to-gray-900">
+    <div class="text-center space-y-8 anim-up">
+      <div class="relative">
+        <div class="absolute inset-0 bg-pink-500 rounded-full blur-3xl opacity-40 anim-pulse"></div>
+        <h1 class="text-7xl font-black grad-text relative z-10">Physio SUAI</h1>
+      </div>
+      <p class="text-3xl text-pink-300 anim-up" style="animation-delay:.3s">By SULLIVAN</p>
+      <div class="flex justify-center gap-2 anim-up" style="animation-delay:.6s">
+        <span class="w-3 h-3 bg-pink-500 rounded-full anim-pulse inline-block"></span>
+        <span class="w-3 h-3 bg-purple-400 rounded-full anim-pulse inline-block" style="animation-delay:.2s"></span>
+        <span class="w-3 h-3 bg-blue-400 rounded-full anim-pulse inline-block" style="animation-delay:.4s"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="loginBox" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-md w-full glass rounded-3xl p-8 shadow-2xl anim-up">
+      <div class="text-center mb-8">
+        <h2 class="text-4xl font-black grad-text mb-1">Welcome Back</h2>
+        <p class="text-gray-400 text-sm">Login to continue your journey</p>
+      </div>
+      <div class="space-y-5">
+        <input type="email" id="lEmail" placeholder="Email" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-pink-500 transition text-white placeholder-gray-500">
+        <input type="password" id="lPass" placeholder="Password" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-pink-500 transition text-white placeholder-gray-500">
+        <label class="flex items-center gap-3 cursor-pointer select-none">
+          <div class="relative"><input type="checkbox" id="keepSignedIn" class="sr-only peer" checked><div class="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:bg-gradient-to-r peer-checked:from-pink-500 peer-checked:to-purple-600 transition-all"></div><div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5 shadow"></div></div>
+          <span class="text-gray-300 text-sm font-medium">Keep me signed in</span>
+        </label>
+        <button onclick="doLogin()" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 font-bold py-4 rounded-xl transition transform active:scale-95 shadow-lg text-white">Login</button>
+        <div id="loginErr" class="hidden text-red-400 text-sm text-center font-medium"></div>
+      </div>
+      <p class="text-center text-gray-400 mt-6 text-sm">No account? <button onclick="showSignup()" class="text-pink-400 font-semibold ml-1">Sign Up</button></p>
+    </div>
+  </div>
+
+  <!-- SIGNUP -->
+  <div id="signupBox" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-md w-full glass rounded-3xl p-8 shadow-2xl anim-up">
+      <div class="text-center mb-8">
+        <h2 class="text-4xl font-black grad-text mb-1">Create Account</h2>
+        <p class="text-gray-400 text-sm">Join the Physio SUAI community</p>
+      </div>
+      <div class="space-y-5">
+        <input type="text" id="sName" placeholder="Full Name" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-pink-500 transition text-white placeholder-gray-500">
+        <input type="email" id="sEmail" placeholder="Email" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-pink-500 transition text-white placeholder-gray-500">
+        <input type="password" id="sPass" placeholder="Password (min 6 chars)" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-pink-500 transition text-white placeholder-gray-500">
+        <input type="password" id="sPass2" placeholder="Confirm Password" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-pink-500 transition text-white placeholder-gray-500">
+        <button onclick="doSignup()" class="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 font-bold py-4 rounded-xl transition transform active:scale-95 shadow-lg text-white">Sign Up</button>
+        <div id="signupErr" class="hidden text-red-400 text-sm text-center font-medium"></div>
+      </div>
+      <p class="text-center text-gray-400 mt-6 text-sm">Already have an account? <button onclick="showLogin()" class="text-pink-400 font-semibold ml-1">Login</button></p>
+    </div>
+  </div>
+
+  <!-- SPINNER -->
+  <div id="spinner" class="hidden fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm flex items-center justify-center">
+    <div class="text-center space-y-4"><div class="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto"></div><p id="spinMsg" class="text-white font-semibold">Please wait…</p></div>
+  </div>
+
+  <script>
+    var FIREBASE_CONFIG={apiKey:'AIzaSyDXW75z9soy3vZlh3LvYi1DZJhYn1XQl-c',authDomain:'physio-suai.firebaseapp.com',databaseURL:'https://physio-suai-default-rtdb.firebaseio.com',projectId:'physio-suai',storageBucket:'physio-suai.firebasestorage.app',messagingSenderId:'316528709010',appId:'1:316528709010:android:20ec9de524ab1d0567454b'};
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    var auth=firebase.auth(), db=firebase.database(), currentUser=null, _resolved=false;
+    auth.onAuthStateChanged(function(user){ if(user){currentUser=user;if(!_resolved){_resolved=true;sessionStorage.setItem('_physio_authed','1');window.location.href='home.html';}}else{_resolved=true;}});
+
+    // Capacitor deviceready (also fires for Capacitor)
+    function _onDeviceReady(){
+      var SB=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.StatusBar;
+      if(SB){SB.setBackgroundColor({color:'#111827'}).catch(function(){});SB.setStyle({style:'DARK'}).catch(function(){});}
+      var SS=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.SplashScreen;
+      if(SS) setTimeout(function(){SS.hide().catch(function(){});},2000);
+    }
+    document.addEventListener('deviceready',_onDeviceReady,false);
+    if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()) setTimeout(_onDeviceReady,500);
+
+    function spin(m){document.getElementById('spinMsg').textContent=m||'Please wait…';document.getElementById('spinner').classList.remove('hidden');}
+    function stopSpin(){document.getElementById('spinner').classList.add('hidden');}
+    function showErr(id,m){var el=document.getElementById(id);el.textContent=m;el.classList.remove('hidden');}
+    function hideErr(id){document.getElementById(id).classList.add('hidden');}
+    function showLogin(){document.getElementById('signupBox').classList.add('hidden');document.getElementById('loginBox').classList.remove('hidden');}
+    function showSignup(){document.getElementById('loginBox').classList.add('hidden');document.getElementById('signupBox').classList.remove('hidden');}
+
+    setTimeout(function(){
+      var intro=document.getElementById('intro');
+      intro.style.cssText='opacity:0;transition:opacity 1s;pointer-events:none';
+      setTimeout(function(){intro.classList.add('hidden');if(!currentUser)document.getElementById('loginBox').classList.remove('hidden');},1000);
+    },2800);
+
+    function doLogin(){
+      hideErr('loginErr');
+      var email=document.getElementById('lEmail').value.trim(), pass=document.getElementById('lPass').value;
+      if(!email||!pass){showErr('loginErr','Please fill in all fields.');return;}
+      var persist=document.getElementById('keepSignedIn').checked?firebase.auth.Auth.Persistence.LOCAL:firebase.auth.Auth.Persistence.SESSION;
+      spin('Logging in…');
+      auth.setPersistence(persist).then(function(){return auth.signInWithEmailAndPassword(email,pass);}).then(function(){stopSpin();window.location.href='home.html';}).catch(function(e){stopSpin();showErr('loginErr',e.message);});
+    }
+
+    function doSignup(){
+      hideErr('signupErr');
+      var name=document.getElementById('sName').value.trim(),email=document.getElementById('sEmail').value.trim(),pass=document.getElementById('sPass').value,pass2=document.getElementById('sPass2').value;
+      if(!name||!email||!pass||!pass2){showErr('signupErr','Please fill in all fields.');return;}
+      if(pass!==pass2){showErr('signupErr','Passwords do not match!');return;}
+      if(pass.length<6){showErr('signupErr','Password must be 6+ characters.');return;}
+      spin('Creating account…');
+      auth.createUserWithEmailAndPassword(email,pass).then(function(cred){return db.ref('users/'+cred.user.uid).set({name:name,email:email,bio:'Physio SUAI Member',photoURL:null,joinedAt:Date.now()});}).then(function(){stopSpin();showLogin();var b=document.createElement('div');b.className='fixed top-4 left-1/2 -translate-x-1/2 z-[9999] bg-green-500 text-white font-semibold px-6 py-3 rounded-xl shadow-xl';b.textContent='Account created! Please login.';document.body.appendChild(b);setTimeout(function(){b.remove();},3000);}).catch(function(e){stopSpin();showErr('signupErr',e.message);});
+    }
+
+    document.addEventListener('keydown',function(e){if(e.key==='Enter'){if(!document.getElementById('loginBox').classList.contains('hidden'))doLogin();if(!document.getElementById('signupBox').classList.contains('hidden'))doSignup();}});
+  </script>
+</body>
+</html>
