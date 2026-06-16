@@ -16,22 +16,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: 17
           distribution: temurin
-
-      - name: Install Node dependencies
-        run: npm install --legacy-peer-deps --ignore-scripts
-
-      - name: Sync Capacitor
-        run: ./node_modules/.bin/cap sync android
 
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
@@ -39,7 +28,7 @@ jobs:
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -57,22 +46,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: 17
           distribution: temurin
-
-      - name: Install Node dependencies
-        run: npm install --legacy-peer-deps --ignore-scripts
-
-      - name: Sync Capacitor
-        run: ./node_modules/.bin/cap sync android
 
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
@@ -80,22 +58,20 @@ jobs:
       - name: Build & sign Release APK
         run: |
           cd android
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease --no-daemon --stacktrace \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/keystore/physio-suai.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
-            --no-daemon
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Build & sign Release AAB
         run: |
           cd android
-          ./gradlew bundleRelease \
+          ./gradlew bundleRelease --no-daemon --stacktrace \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/keystore/physio-suai.jks \
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
-            --no-daemon
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4

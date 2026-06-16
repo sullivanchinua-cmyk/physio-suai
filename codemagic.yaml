@@ -9,7 +9,6 @@ workflows:
         KEY_ALIAS: "physiosuai"
         KEYSTORE_PASSWORD: "1qaz0plm"
         KEY_PASSWORD: "1qaz0plm"
-      node: 22
       java: 17
 
     triggering:
@@ -35,14 +34,6 @@ workflows:
               > android/app/google-services.json
           fi
 
-      - name: Install Node dependencies
-        script: |
-          npm install --legacy-peer-deps --ignore-scripts
-
-      - name: Sync Capacitor
-        script: |
-          ./node_modules/.bin/cap sync android
-
       - name: Make Gradle wrapper executable
         script: |
           chmod +x android/gradlew
@@ -55,7 +46,7 @@ workflows:
             -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
             -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
             -Pandroid.injected.signing.key.password=$KEY_PASSWORD \
-            --no-daemon
+            --no-daemon --stacktrace
 
     artifacts:
       - android/app/build/outputs/apk/release/app-release.apk
