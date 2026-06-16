@@ -417,7 +417,7 @@ function _openCameraWebRTC() {
 
   function startCam(mode) {
     if (stream) stream.getTracks().forEach(function(t){ t.stop(); });
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: true })
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false })
       .then(function(s) { stream = s; vid.srcObject = s; })
       .catch(function() {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false })
@@ -1338,12 +1338,33 @@ function loadWallpaper() {
   // Nothing to do here — keeping function for backward compat.
 }
 
-// ═══ KEYBOARD FIX ═══════════════════════════════════════════════
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', function() {
-    window.scrollTo(0,0); scrollBottom();
-  });
-}
+// ═══ KEYBOARD FIX — keep input bar above Android keyboard ═══════
+(function() {
+  var _lastKBH = 0;
+  function _applyKB() {
+    if (!window.visualViewport) return;
+    var kbh = Math.max(0, window.innerHeight - window.visualViewport.height - (window.visualViewport.offsetTop || 0));
+    if (Math.abs(kbh - _lastKBH) < 5) return;
+    _lastKBH = kbh;
+    var ib = document.getElementById('inputBar');
+    var msgs = document.getElementById('msgs');
+    if (kbh > 50) {
+      if (ib) { ib.style.position='fixed'; ib.style.bottom=kbh+'px'; ib.style.left='0'; ib.style.right='0'; ib.style.zIndex='500'; }
+      if (msgs) msgs.style.paddingBottom = (kbh + 80) + 'px';
+    } else {
+      if (ib) { ib.style.position=''; ib.style.bottom=''; ib.style.left=''; ib.style.right=''; ib.style.zIndex=''; }
+      if (msgs) msgs.style.paddingBottom = '';
+    }
+    window.scrollTo(0, 0);
+    setTimeout(scrollBottom, 80);
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', _applyKB);
+    window.visualViewport.addEventListener('scroll', function() { window.scrollTo(0, 0); });
+  }
+  var inp = document.getElementById('msgInp');
+  if (inp) { inp.addEventListener('focus', function() { setTimeout(scrollBottom, 400); }); }
+})();
 
 // ═══ MENU ═══════════════════════════════════════════════════════
 function toggleMenu() {
