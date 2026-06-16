@@ -28,10 +28,10 @@ jobs:
           distribution: temurin
 
       - name: Install Node dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: ./node_modules/.bin/cap sync android
 
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
@@ -69,10 +69,10 @@ jobs:
           distribution: temurin
 
       - name: Install Node dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --ignore-scripts
 
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: ./node_modules/.bin/cap sync android
 
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
