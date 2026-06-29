@@ -46,13 +46,16 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Install npm dependencies
         run: npm ci --legacy-peer-deps
 
       # webDir="src" — Capacitor reads src/ directly. No Vite build needed.
 
-      - name: Sync Capacitor (no build)
-        run: npx cap sync android --no-build
+      - name: Sync Capacitor
+        run: npx cap sync android
 
       - name: Place google-services.json
         run: |
@@ -117,13 +120,16 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Install npm dependencies
         run: npm ci --legacy-peer-deps
 
       # webDir="src" — Capacitor reads src/ directly. No Vite build needed.
 
       - name: Sync Capacitor
-        run: npx cap sync android --no-build
+        run: npx cap sync android
 
       - name: Place google-services.json
         run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
@@ -153,10 +159,10 @@ jobs:
         run: |
           cd android
           ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=$(pwd)/app/physio_release.jks \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }} \
+            -PKEYSTORE_FILE=$(pwd)/app/physio_release.jks \
+            -PKEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
+            -PKEY_ALIAS=${{ secrets.KEY_ALIAS }} \
+            -PKEY_PASSWORD=${{ secrets.KEY_PASSWORD }} \
             -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g" \
             -Dorg.gradle.daemon=false
 
