@@ -11,15 +11,28 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            // Values are injected by Codemagic / GitHub Actions via -PKEYSTORE_FILE etc.
+            // For local signing: create android/keystore.properties and set values there.
+            def ksFile = project.findProperty("KEYSTORE_FILE") ?: "physio_release.jks"
+            storeFile file(ksFile)
+            storePassword (project.findProperty("KEYSTORE_PASSWORD") ?: "")
+            keyAlias (project.findProperty("KEY_ALIAS") ?: "physiosuai")
+            keyPassword (project.findProperty("KEY_PASSWORD") ?: "")
         }
     }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Debug uses default debug keystore — no explicit signingConfig needed
         }
     }
 }
