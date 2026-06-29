@@ -1,7 +1,7 @@
 ##############################################################
 # PHYSIO SUAI — .github/workflows/android.yml
-# GitHub Actions: Debug APK on every push to main
-# Release AAB on version tags (v*)
+# Debug APK: every push to main/dev
+# Release APK + AAB: tags v*
 ##############################################################
 
 name: Build Physio SUAI Android
@@ -12,15 +12,15 @@ on:
     tags:     [ 'v*' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 env:
-  NODE_VERSION: '20'
-  JAVA_VERSION: '17'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
 
   ##############################################################
-  # JOB 1 — Build debug APK
+  # JOB 1 — Debug APK (every push)
   ##############################################################
   build-debug:
     name: Debug APK
@@ -31,62 +31,22 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Set up Java ${{ env.JAVA_VERSION }}
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          java-version: 21
+          distribution: temurin
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses 2>/dev/null || true
-
-      - name: Install npm dependencies
-        run: npm ci --legacy-peer-deps
-
-      # webDir="src" — Capacitor reads src/ directly. No Vite build needed.
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Place google-services.json
-        run: |
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-
-      - name: Copy sound assets to Android res/raw
-        run: |
-          mkdir -p android/app/src/main/res/raw
-          cp src/1774_alarm.mp3 android/app/src/main/res/raw/alarm_1774.mp3
-          cp src/mixkit_positive_notification_951.mp3 android/app/src/main/res/raw/mixkit_positive_notification_951.mp3
-
-      - name: Make gradlew executable
+      - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
 
       - name: Build debug APK
         run: |
           cd android
-          ./gradlew assembleDebug \
-            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g" \
-            -Dorg.gradle.daemon=false
+          ./gradlew assembleDebug --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g"
 
-      - name: Upload debug APK artifact
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: physio-suai-debug-${{ github.run_number }}
@@ -94,10 +54,10 @@ jobs:
           retention-days: 14
 
   ##############################################################
-  # JOB 2 — Build signed release AAB (tags only)
+  # JOB 2 — Signed Release APK + AAB (tags only)
   ##############################################################
   build-release:
-    name: Release AAB
+    name: Release APK + AAB
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -105,80 +65,55 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Set up Java ${{ env.JAVA_VERSION }}
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          java-version: 21
+          distribution: temurin
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        run: yes | sdkmanager --licenses 2>/dev/null || true
-
-      - name: Install npm dependencies
-        run: npm ci --legacy-peer-deps
-
-      # webDir="src" — Capacitor reads src/ directly. No Vite build needed.
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Place google-services.json
-        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-
-      - name: Copy sound assets to Android res/raw
-        run: |
-          mkdir -p android/app/src/main/res/raw
-          cp src/1774_alarm.mp3 android/app/src/main/res/raw/alarm_1774.mp3
-          cp src/mixkit_positive_notification_951.mp3 android/app/src/main/res/raw/mixkit_positive_notification_951.mp3
-
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_FILE_B64 }}" | base64 --decode > android/app/physio_release.jks
-
-      - name: Make gradlew executable
+      - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-
-      - name: Build release AAB (signed)
+      - name: Build & sign release APK
         run: |
           cd android
-          ./gradlew bundleRelease \
-            -PKEYSTORE_FILE=$(pwd)/app/physio_release.jks \
-            -PKEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-            -PKEY_ALIAS=${{ secrets.KEY_ALIAS }} \
-            -PKEY_PASSWORD=${{ secrets.KEY_PASSWORD }} \
+          ./gradlew assembleRelease --no-daemon --stacktrace \
             -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g" \
-            -Dorg.gradle.daemon=false
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/physio_release.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload release AAB artifact
+      - name: Build & sign release AAB
+        run: |
+          cd android
+          ./gradlew bundleRelease --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g" \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/physio_release.jks \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: physio-suai-release-${{ github.ref_name }}
-          path: |
-            android/app/build/outputs/bundle/release/app-release.aab
-            android/app/build/outputs/mapping/release/mapping.txt
+          name: physio-suai-release-apk-${{ github.ref_name }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: physio-suai-release-aab-${{ github.ref_name }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/bundle/release/app-release.aab
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
