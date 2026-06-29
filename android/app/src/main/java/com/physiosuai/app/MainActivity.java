@@ -1,12 +1,13 @@
 package com.physiosuai.app;
 
+import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
+import com.physiosuai.app.AlarmReceiver;
 
 public class MainActivity extends BridgeActivity {
     @Override
-    public void onCreate(android.os.Bundle savedInstanceState) {
-        registerPlugin(BackgroundAudioPlugin.class);
-        registerPlugin(PhysioPrefsPlugin.class);
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AlarmReceiver.ensureChannels(this);
     }
 }

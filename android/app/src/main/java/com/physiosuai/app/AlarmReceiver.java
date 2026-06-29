@@ -1,6 +1,5 @@
 package com.physiosuai.app;
 
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -8,127 +7,104 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
-import android.os.PowerManager;
 import android.util.Log;
+
 import androidx.core.app.NotificationCompat;
 
 /**
- * Fires when a scheduled lecture alarm triggers.
- * Plays alarm.mp3 at full volume + shows full-screen notification.
- * Works even when app is closed or screen is off.
+ * PHYSIO SUAI — AlarmReceiver
+ *
+ * Fires a high-priority alarm notification with the 1774 sound asset.
+ * Wakes the screen if the device is idle.
+ *
+ * Place this file at:
+ *   android/app/src/main/java/com/physiosuai/app/AlarmReceiver.java
  */
 public class AlarmReceiver extends BroadcastReceiver {
-    private static final String TAG            = "PhysioAlarmReceiver";
-    private static final String ALARM_CHANNEL  = "physio_alarm_channel";
-    private static final String NOTIF_CHANNEL  = "physio_suai_channel";
-    private static final int    NOTIF_ID       = 7777;
 
-    private static MediaPlayer _player;
+    private static final String TAG              = "PhysioAlarmReceiver";
+    private static final String CHANNEL_ALARMS   = "alarms";
+    private static final String CHANNEL_MESSAGES = "messages";
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        int    alarmId = intent.getIntExtra("alarmId", 0);
-        String title   = intent.getStringExtra("alarmTitle");
-        String body    = intent.getStringExtra("alarmBody");
-        String page    = intent.getStringExtra("page");
-        if (title == null) title = "Lecture Alarm";
-        if (body  == null) body  = "Your lecture is starting now!";
-        if (page  == null) page  = "";
+        String title   = intent.getStringExtra("title");
+        String body    = intent.getStringExtra("body");
+        int    alarmId = intent.getIntExtra("alarmId", (int)(System.currentTimeMillis() % 100000));
 
-        Log.d(TAG, "Alarm fired: " + title);
+        Log.i(TAG, "Alarm fired: " + title);
 
-        // Wake the device screen
-        PowerManager pm       = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wl = pm.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "PhysioSUAI:AlarmWakeLock"
-        );
-        wl.acquire(30000); // 30 seconds
+        // Ensure notification channels exist (idempotent — Android deduplicates by channel ID,
+        // but channels are immutable after first creation so sound/importance won't change here
+        // if they were already created at app startup in MainActivity.onCreate).
+        ensureChannels(context);
 
-        // Play alarm sound at full volume
-        playAlarm(context);
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
 
-        // Show full-screen notification
-        showFullScreenNotification(context, alarmId, title, body, page);
-    }
-
-    private void playAlarm(Context context) {
-        try {
-            if (_player != null) { try { _player.stop(); _player.release(); } catch(Exception ignored){} }
-            Uri alarmUri = Uri.parse("android.resource://" + context.getPackageName() + "/raw/alarm");
-            _player = new MediaPlayer();
-            _player.setDataSource(context, alarmUri);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                _player.setAudioAttributes(new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build());
-            }
-            _player.setVolume(1.0f, 1.0f);
-            _player.setLooping(false);
-            _player.prepare();
-            _player.start();
-            Log.d(TAG, "Alarm sound playing");
-        } catch (Exception e) {
-            Log.e(TAG, "Alarm sound error: " + e.getMessage());
-        }
-    }
-
-    private void showFullScreenNotification(Context ctx, int alarmId, String title, String body, String page) {
-        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Alarm channel (max importance, alarm sound)
-            if (nm.getNotificationChannel(ALARM_CHANNEL) == null) {
-                NotificationChannel ch = new NotificationChannel(
-                    ALARM_CHANNEL, "Lecture Alarms", NotificationManager.IMPORTANCE_HIGH
-                );
-                ch.enableVibration(true);
-                ch.setVibrationPattern(new long[]{0, 500, 200, 500});
-                ch.setSound(
-                    Uri.parse("android.resource://" + ctx.getPackageName() + "/raw/alarm"),
-                    new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()
-                );
-                nm.createNotificationChannel(ch);
-            }
-            // Chat channel
-            if (nm.getNotificationChannel(NOTIF_CHANNEL) == null) {
-                NotificationChannel ch2 = new NotificationChannel(
-                    NOTIF_CHANNEL, "Physio SUAI Notifications", NotificationManager.IMPORTANCE_HIGH
-                );
-                ch2.enableVibration(true);
-                ch2.setSound(
-                    Uri.parse("android.resource://" + ctx.getPackageName() + "/raw/notification"),
-                    new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build()
-                );
-                nm.createNotificationChannel(ch2);
-            }
-        }
-
-        // Tap → open app
-        Intent openIntent = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
-        if (openIntent != null && !page.isEmpty()) openIntent.putExtra("page", page);
+        // ── Build tap intent ───────────────────────────────────────────────
+        Intent tapIntent = new Intent(context, MainActivity.class);
+        tapIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        tapIntent.putExtra("alarm_tap", true);
         PendingIntent pi = PendingIntent.getActivity(
-            ctx, alarmId, openIntent != null ? openIntent : new Intent(),
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            context, alarmId, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT |
+            (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0)
         );
 
-        NotificationCompat.Builder nb = new NotificationCompat.Builder(ctx, ALARM_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(title)
-            .setContentText(body)
+        // ── Show notification ──────────────────────────────────────────────
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ALARMS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title != null ? title : "Lecture Update")
+            .setContentText(body != null ? body : "Tap to view")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
-            .setFullScreenIntent(pi, true)
             .setContentIntent(pi)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", pi)
-            .setOngoing(false);
+            .setFullScreenIntent(pi, true); // heads-up on lock screen
 
-        nm.notify(NOTIF_ID, nb.build());
+        nm.notify(alarmId, builder.build());
+    }
+
+    /**
+     * Create notification channels if they don't already exist.
+     * Safe to call multiple times — Android deduplicates by channel ID.
+     * ⚠️  Call this from MainActivity.onCreate() FIRST, before any notification
+     * fires, so that the correct sound/importance is set on first creation.
+     * Android makes channels immutable after first creation — if this ran
+     * with wrong values on a previous install, uninstall the app to reset.
+     */
+    public static void ensureChannels(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        Uri alarmSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/alarm_1774");
+        AudioAttributes alarmAttrs = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build();
+        NotificationChannel alarmCh = new NotificationChannel(
+            CHANNEL_ALARMS, "Lecture Alarms", NotificationManager.IMPORTANCE_HIGH
+        );
+        alarmCh.setDescription("Lecture update alarms");
+        alarmCh.setSound(alarmSound, alarmAttrs);
+        alarmCh.enableVibration(true);
+        alarmCh.setVibrationPattern(new long[]{0, 500, 200, 500});
+        nm.createNotificationChannel(alarmCh);
+
+        Uri msgSound = Uri.parse("android.resource://" + context.getPackageName() + "/raw/mixkit_positive_notification_951");
+        AudioAttributes msgAttrs = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build();
+        NotificationChannel msgCh = new NotificationChannel(
+            CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH
+        );
+        msgCh.setDescription("Chat message notifications");
+        msgCh.setSound(msgSound, msgAttrs);
+        msgCh.enableVibration(true);
+        nm.createNotificationChannel(msgCh);
     }
 }
