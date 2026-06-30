@@ -29,8 +29,14 @@ workflows:
     scripts:
       - name: Install npm packages
         script: |
+          set -e
+          echo "=== Node version ===" && node --version
+          echo "=== NPM version ===" && npm --version
+          echo "=== Removing committed node_modules ==="
           rm -rf node_modules
-          npm install --legacy-peer-deps
+          echo "=== Running npm ci ==="
+          npm ci --legacy-peer-deps 2>&1 | tee /tmp/npm_install.log
+          echo "=== npm ci exit code: $? ==="
 
       - name: Sync Capacitor
         script: npx cap sync android
@@ -42,11 +48,12 @@ workflows:
         script: |
           cd android
           ./gradlew assembleDebug --no-daemon \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" 2>&1 | tee /tmp/gradle_build.log
 
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
-      - android/app/build/outputs/logs/**
+      - /tmp/npm_install.log
+      - /tmp/gradle_build.log
 
     publishing:
       email:
@@ -87,7 +94,7 @@ workflows:
       - name: Install npm packages
         script: |
           rm -rf node_modules
-          npm install --legacy-peer-deps
+          npm ci --legacy-peer-deps
 
       - name: Sync Capacitor
         script: npx cap sync android
