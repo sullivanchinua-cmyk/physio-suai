@@ -1,62 +1,144 @@
+##############################################################
+# PHYSIO SUAI — codemagic.yaml
+# Capacitor Android build pipeline
+##############################################################
+
 workflows:
-  android-release:
-    name: Physio SUAI – Android Release Build
+
+  physio-android-debug:
+    name: Physio SUAI — Android Debug APK
+    instance_type: mac_mini_m2
     max_build_duration: 60
+
     environment:
+      node: 20.11.0
+      java: 21
       vars:
         PACKAGE_NAME: "com.physiosuai.app"
-        KEYSTORE_PATH: "keystore/physio-suai.jks"
-        KEY_ALIAS: "physiosuai"
-        KEYSTORE_PASSWORD: "1qaz0plm"
-        KEY_PASSWORD: "1qaz0plm"
-      java: 21
+
+    cache:
+      cache_paths:
+        - $HOME/.npm
+        - $HOME/.gradle/caches
+        - node_modules
 
     triggering:
       events:
         - push
-        - pull_request
       branch_patterns:
         - pattern: main
           include: true
-          source: true
 
     scripts:
-      - name: Set Android SDK location
-        script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+      - name: Install npm packages
+        script: npm install --legacy-peer-deps
 
-      - name: Set up Google Services JSON
-        script: |
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
-          elif [ ! -f android/app/google-services.json ]; then
-            echo '{"project_info":{"project_number":"000000","project_id":"placeholder","storage_bucket":"placeholder.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000:android:000000","android_client_info":{"package_name":"com.physiosuai.app"}},"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' \
-              > android/app/google-services.json
-          fi
+      - name: Sync Capacitor
+        script: npx cap sync android
 
-      - name: Make Gradle wrapper executable
-        script: |
-          chmod +x android/gradlew
+      - name: Place google-services.json
+        script: cp google-services.json android/app/google-services.json
 
-      - name: Build and sign Release APK & AAB
+      - name: Copy sound assets
+        script: |
+          mkdir -p android/app/src/main/res/raw
+          cp src/1774_alarm.mp3 android/app/src/main/res/raw/alarm_1774.mp3
+          cp src/mixkit_positive_notification_951.mp3 android/app/src/main/res/raw/mixkit_positive_notification_951.mp3
+
+      - name: Set Gradle permissions
+        script: chmod +x android/gradlew
+
+      - name: Build Android debug APK
         script: |
           cd android
-          ./gradlew assembleRelease bundleRelease \
-            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/$KEYSTORE_PATH \
-            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$KEY_PASSWORD \
-            --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
 
     artifacts:
-      - android/app/build/outputs/apk/release/app-release.apk
-      - android/app/build/outputs/bundle/release/app-release.aab
-      - android/app/build/outputs/mapping/release/mapping.txt
+      - android/app/build/outputs/apk/debug/app-debug.apk
+      - android/app/build/outputs/logs/**
 
     publishing:
       email:
         recipients:
-          - sullivan@physiosuai.app
+          - physiosuai@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  ##############################################################
+
+  physio-android-release:
+    name: Physio SUAI — Android Release AAB
+    instance_type: mac_mini_m2
+    max_build_duration: 90
+
+    environment:
+      node: 20.11.0
+      java: 21
+      groups:
+        - physio_keystore
+        - google_play
+      vars:
+        PACKAGE_NAME: "com.physiosuai.app"
+
+    cache:
+      cache_paths:
+        - $HOME/.npm
+        - $HOME/.gradle/caches
+        - node_modules
+
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+
+    scripts:
+      - name: Install npm packages
+        script: npm install --legacy-peer-deps
+
+      - name: Sync Capacitor
+        script: npx cap sync android
+
+      - name: Place google-services.json
+        script: cp google-services.json android/app/google-services.json
+
+      - name: Copy sound assets
+        script: |
+          mkdir -p android/app/src/main/res/raw
+          cp src/1774_alarm.mp3 android/app/src/main/res/raw/alarm_1774.mp3
+          cp src/mixkit_positive_notification_951.mp3 android/app/src/main/res/raw/mixkit_positive_notification_951.mp3
+
+      - name: Set Gradle permissions
+        script: chmod +x android/gradlew
+
+      - name: Decode keystore
+        script: echo $KEYSTORE_FILE | base64 --decode > android/app/physio_release.jks
+
+      - name: Build release AAB
+        script: |
+          cd android
+          ./gradlew bundleRelease --no-daemon \
+            -PKEYSTORE_FILE=$(pwd)/app/physio_release.jks \
+            -PKEYSTORE_PASSWORD=$KEYSTORE_PASSWORD \
+            -PKEY_ALIAS=$KEY_ALIAS \
+            -PKEY_PASSWORD=$KEY_PASSWORD \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+    artifacts:
+      - android/app/build/outputs/bundle/release/app-release.aab
+      - android/app/build/outputs/mapping/release/mapping.txt
+
+    publishing:
+      google_play:
+        credentials: $GPLAY_SERVICE_ACCOUNT_JSON
+        track: internal
+        submit_as_draft: true
+      email:
+        recipients:
+          - physiosuai@gmail.com
         notify:
           success: true
           failure: true
