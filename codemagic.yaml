@@ -10,7 +10,7 @@ workflows:
     max_build_duration: 60
 
     environment:
-      node: 20.11.0
+      node: 22
       java: 21
       vars:
         PACKAGE_NAME: "com.physiosuai.app"
@@ -29,23 +29,23 @@ workflows:
     scripts:
       - name: Install npm packages
         script: |
-          set -e
-          echo "=== Node version ===" && node --version
-          echo "=== NPM version ===" && npm --version
-          echo "=== Removing committed node_modules ==="
+          set -eo pipefail
+          echo "Node: $(node --version) | NPM: $(npm --version)"
           rm -rf node_modules
-          echo "=== Running npm ci ==="
-          npm ci --legacy-peer-deps 2>&1 | tee /tmp/npm_install.log
-          echo "=== npm ci exit code: $? ==="
+          npm install --legacy-peer-deps 2>&1 | tee /tmp/npm_install.log
+          echo "npm install done — exit 0"
 
       - name: Sync Capacitor
-        script: npx cap sync android
+        script: |
+          set -eo pipefail
+          npx cap sync android 2>&1 | tee /tmp/cap_sync.log
 
       - name: Set Gradle permissions
         script: chmod +x android/gradlew
 
       - name: Build Android debug APK
         script: |
+          set -eo pipefail
           cd android
           ./gradlew assembleDebug --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g" 2>&1 | tee /tmp/gradle_build.log
@@ -53,6 +53,7 @@ workflows:
     artifacts:
       - android/app/build/outputs/apk/debug/app-debug.apk
       - /tmp/npm_install.log
+      - /tmp/cap_sync.log
       - /tmp/gradle_build.log
 
     publishing:
@@ -71,7 +72,7 @@ workflows:
     max_build_duration: 90
 
     environment:
-      node: 20.11.0
+      node: 22
       java: 21
       groups:
         - physio_keystore
@@ -93,8 +94,9 @@ workflows:
     scripts:
       - name: Install npm packages
         script: |
+          set -eo pipefail
           rm -rf node_modules
-          npm ci --legacy-peer-deps
+          npm install --legacy-peer-deps
 
       - name: Sync Capacitor
         script: npx cap sync android
@@ -107,6 +109,7 @@ workflows:
 
       - name: Build release AAB
         script: |
+          set -eo pipefail
           cd android
           ./gradlew bundleRelease --no-daemon \
             -PKEYSTORE_FILE=$(pwd)/app/physio_release.jks \
